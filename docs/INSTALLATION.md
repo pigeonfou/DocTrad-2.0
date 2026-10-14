@@ -24,7 +24,7 @@ Cookies Secure par défaut : accès HTTPS requis. Pour un LAN HTTP explicitement
 
 Sur l’hôte runner, `scripts/setup-runner.sh` utilise une session gh déjà authentifiée et un runner extrait pour enregistrer `doctrad2-ubuntu`, label `doctrad2-deploy`. Installer ensuite son service comme pour les runners existants. Le checkout protégé `/usr/local/src/DocTrad-2.0` appartient à root et pointe exactement vers le nouveau dépôt. Installer `deploy/doctrad2-deploy` en `/usr/local/sbin/doctrad2-deploy`, root:root 0755 ; sudoers autorise uniquement ce helper au compte runner, jamais une commande shell arbitraire.
 
-La variable GitHub `DOCTRAD2_DEPLOY_ENABLED=true` active les déploiements après l’enrôlement. Elle évite qu’un nouveau dépôt sans configuration lance une installation incomplète ; ce n’est pas un mécanisme de demande d’approbation utilisateur. Tests sur 3.12/3.14, puis exact SHA testé, rejet des commits dépassés. Le helper root fetch la branche main du dépôt protégé ; pas d’exécution de scripts provenant d’un dossier modifiable par le runner.
+Le déploiement est actif après l’enrôlement, sauf si `DOCTRAD2_DEPLOY_ENABLED=false`. Elle évite qu’un nouveau dépôt sans configuration lance une installation incomplète ; ce n’est pas un mécanisme de demande d’approbation utilisateur. Tests sur 3.12/3.14, puis exact SHA testé, rejet des commits dépassés. Le helper root fetch la branche main du dépôt protégé ; pas d’exécution de scripts provenant d’un dossier modifiable par le runner.
 
 ## Offline et restauration
 
@@ -33,3 +33,9 @@ Préparer les paquets OS et le wheelhouse avant isolement, `scripts/build-offlin
 `scripts/backup.sh` arrête l’API et le worker pendant le snapshot, sauvegarde PostgreSQL ou SQLite et les objets, puis rétablit leurs états actifs précédents. Prévoir cette courte fenêtre de maintenance. `scripts/rollback.sh SHA` restaure une release installée validée, pas seulement le head d’une branche. La première version initialise le schéma ; migrations suivantes obligatoirement expand/contract avec tests de lecture par release précédente. Tester la restauration avant mise en production.
 
 `doctrad2 diagnose` vérifie le protocole LLM ; `/health` vérifie l’application/base, pas la qualité d’une traduction ni la disponibilité du modèle GPU.
+
+## Première installation sur le serveur DocTrad existant
+
+Après enrôlement du runner, un push validé initialise la base et les services V2 via le helper autorisé. Le compte d’application et la base sont séparés. Les comptes V1 sont copiés localement sous forme de hashes sans journaliser de secrets ; si cette lecture est impossible, un admin V2 distinct est généré en fichier root privé. Le runtime BC-250 n’est pas deviné : tant que port/clé/hashes ne sont pas configurés, le worker est arrêté et l’API refuse le démarrage d’une traduction. `/health` expose `llm_configured=false`. Aucun passage implicite par Unsloth.
+
+Le déploiement est actif par défaut après installation du runner ; la variable GitHub `DOCTRAD2_DEPLOY_ENABLED=false` permet de le suspendre explicitement. La route OneForAll et la connexion BC sont des gates indépendantes de l’installation des services.

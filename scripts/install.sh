@@ -4,7 +4,12 @@ set -euo pipefail
 SOURCE=${DOCTRAD2_SOURCE:-$(cd -- "$(dirname -- "$0")/.." && pwd)}
 SHA=${1:-$(git -C "$SOURCE" rev-parse HEAD)}
 [[ $SHA =~ ^[0-9a-f]{40}$ ]] || exit 2
-[[ -f /etc/doctrad2/app.env ]] || { echo 'Configure /etc/doctrad2/app.env with the LAN inference endpoint and local secrets first'; exit 2; }
+if [[ ! -f /etc/doctrad2/app.env ]]; then
+    PREPARE=$(mktemp)
+    git -C "$SOURCE" show "$SHA:scripts/prepare-server.py" > "$PREPARE"
+    python3 "$PREPARE"
+    rm -f "$PREPARE"
+fi
 command -v python3 >/dev/null
 id doctrad2 >/dev/null 2>&1 || useradd --system --home-dir /var/lib/doctrad2 --shell /usr/sbin/nologin doctrad2
 install -d -m 0750 -o doctrad2 -g doctrad2 /var/lib/doctrad2
@@ -31,12 +36,20 @@ set -a
 source /etc/doctrad2/app.env
 set +a
 runuser -u doctrad2 --preserve-environment -- "$RELEASE/.venv/bin/doctrad2" migrate
+"$RELEASE/.venv/bin/python" "$RELEASE/scripts/prepare-server.py" users "$RELEASE/.venv/bin/python"
 PREVIOUS=$(readlink /opt/doctrad2/current || true)
 ln -s "$RELEASE" /opt/doctrad2/current.new
 mv -Tf /opt/doctrad2/current.new /opt/doctrad2/current
 systemctl daemon-reload
-systemctl enable doctrad2-web doctrad2-worker
-systemctl restart doctrad2-web doctrad2-worker
+systemctl enable doctrad2-web
+systemctl restart doctrad2-web
+if [[ ${DOCTRAD2_MODEL_SHA:-} =~ ^[0-9a-f]{64}$ && ${DOCTRAD2_RUNTIME_SHA:-} =~ ^[0-9a-f]{64}$ ]]; then
+    systemctl enable doctrad2-worker
+    systemctl restart doctrad2-worker
+else
+    systemctl stop doctrad2-worker
+    echo 'Application installed; translation worker held until BC250 runtime is configured'
+fi
 READY=0
 for attempt in {1..20}; do
     if curl -fsS http://127.0.0.1:8097/health >/dev/null; then READY=1; break; fi

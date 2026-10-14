@@ -81,7 +81,7 @@ def create_app(settings=None, database=None):
     def health():
         with db.session() as s:
             s.execute(select(User.name).limit(1))
-        return {"status": "ok", "version": "2.0.0", "inference": "BC250/Vulkan/llama-server", "quality": "not-certified-by-health"}
+        return {"status": "ok", "version": "2.0.0", "inference": "BC250/Vulkan/llama-server", "quality": "not-certified-by-health", "llm_configured": len(settings.model_sha) == 64 and len(settings.runtime_sha) == 64}
 
     @app.get("/")
     def index():
@@ -168,6 +168,8 @@ def create_app(settings=None, database=None):
     @app.post("/v2/documents/{did}/jobs")
     def start(did: str, body: Start, request: Request):
         csrf(request)
+        if not settings.model_sha or not settings.runtime_sha:
+            raise HTTPException(503, "Connexion au moteur BC-250 à configurer")
         with db.session() as s:
             doc = s.get(Document, did)
             if not doc or doc.owner != owner(request):

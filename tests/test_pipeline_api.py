@@ -137,3 +137,14 @@ def test_idempotent_job_creation(settings, database):
     second = client.post(f"/v2/documents/{doc['id']}/jobs", json={}, headers=headers)
     assert first.json()["id"] == second.json()["id"]
     assert client.post(f"/v2/documents/{doc['id']}/jobs", json={"glossary": {"ground": "masse"}}, headers=headers).status_code == 409
+
+
+def test_unconfigured_bc250_blocks_translation_start(settings, database):
+    from dataclasses import replace
+    user(database, "alice")
+    client = TestClient(create_app(replace(settings, model_sha="", runtime_sha=""), database))
+    headers = login(client)
+    assert client.get('/health').json()['llm_configured'] is False
+    doc = client.post('/v2/documents', files={'file': ('x.pdf', pdf())}, headers=headers).json()
+    result = client.post(f"/v2/documents/{doc['id']}/jobs", json={}, headers=headers)
+    assert result.status_code == 503
