@@ -38,6 +38,10 @@ set +a
 runuser -u doctrad2 --preserve-environment -- "$RELEASE/.venv/bin/doctrad2" migrate
 "$RELEASE/.venv/bin/python" "$RELEASE/scripts/prepare-server.py" users "$RELEASE/.venv/bin/python"
 python3 "$RELEASE/scripts/client-identity.py"
+"$RELEASE/.venv/bin/python" "$RELEASE/scripts/configure-gateway.py" "$RELEASE/deploy/bc250-connection.json"
+set -a
+source /etc/doctrad2/app.env
+set +a
 PREVIOUS=$(readlink /opt/doctrad2/current || true)
 ln -s "$RELEASE" /opt/doctrad2/current.new
 mv -Tf /opt/doctrad2/current.new /opt/doctrad2/current
