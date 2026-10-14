@@ -2,6 +2,7 @@ import re
 import time
 import httpx
 from .domain import ModelContract
+from .prompts import render, TEMPLATE_SHA
 
 
 class InferenceError(RuntimeError):
@@ -19,6 +20,7 @@ class LlamaTranslator:
                                    headers={"Authorization": f"Bearer {settings.llm_key}"} if settings.llm_key else {},
                                    trust_env=False, follow_redirects=False, transport=transport)
         self._validated = False
+        self._local_template = False
 
     def close(self):
         self.client.close()
@@ -43,17 +45,18 @@ class LlamaTranslator:
         defaults = props.get("default_generation_settings", {})
         ctx = defaults.get("n_ctx", defaults.get("params", {}).get("n_ctx", 0))
         template = str(props.get("chat_template", ""))
-        if "source_lang_code" not in template or "target_lang_code" not in template:
-            raise InferenceError("translategemma_template_required")
+        self._local_template = "source_lang_code" not in template or "target_lang_code" not in template
         if ctx and ctx < self.contract.input_tokens + self.contract.output_tokens:
             raise InferenceError("llm_context_too_small")
         model = str(props.get("model_path", props.get("model_alias", "")))
-        if model and "translategemma" not in model.lower():
+        if not model or "translategemma-12b" not in model.lower():
             raise InferenceError("wrong_loaded_model")
         self._validated = True
-        return {"model": model, "context": ctx, "template": "embedded-translategemma"}
+        return {"model": model, "context": ctx, "template": "local-translategemma" if self._local_template else "embedded-translategemma", "template_sha": TEMPLATE_SHA}
 
     def prompt(self, text):
+        if self._local_template:
+            return render(text)
         messages = [{"role": "user", "content": [{"type": "text", "source_lang_code": "en",
                                                       "target_lang_code": "fr", "text": text}]}]
         result = self.request("/apply-template", {"messages": messages, "add_generation_prompt": True})
@@ -63,7 +66,7 @@ class LlamaTranslator:
         return prompt
 
     def token_count(self, prompt):
-        result = self.request("/tokenize", {"content": prompt, "add_special": True, "parse_special": True})
+        result = self.request("/tokenize", {"content": prompt, "add_special": False, "parse_special": True})
         tokens = result.get("tokens")
         if not isinstance(tokens, list):
             raise InferenceError("tokenizer_endpoint_required")
@@ -87,9 +90,13 @@ class LlamaTranslator:
         outputs = []
         provenance = []
         for source, prompt in self.chunks(text):
-            result = self.request("/completion", {"prompt": prompt, "n_predict": self.contract.output_tokens,
+            tokenized = self.request("/tokenize", {"content": prompt, "add_special": False, "parse_special": True})
+            prompt_tokens = tokenized.get("tokens")
+            if not isinstance(prompt_tokens, list) or not prompt_tokens:
+                raise InferenceError("tokenizer_endpoint_required")
+            result = self.request("/completion", {"prompt": prompt_tokens, "n_predict": self.contract.output_tokens,
                                   "temperature": 0, "seed": 42, "cache_prompt": True, "stream": False})
-            if result.get("stopped_limit") or result.get("truncated"):
+            if result.get("stopped_limit") or result.get("truncated") or result.get("stop_type") == "limit":
                 raise InferenceError("translation_truncated")
             target = result.get("content")
             if not isinstance(target, str) or not target.strip():
@@ -98,4 +105,5 @@ class LlamaTranslator:
             provenance.append({"source_length": len(source), "input_tokens": self.token_count(prompt),
                                "output_tokens": result.get("tokens_predicted"), "timings": result.get("timings", {})})
         return "\n".join(outputs), {"contract": self.contract.model_dump(), "chunks": provenance,
-                                      "context_policy": "official_template_source_only;context_for_review"}
+                                      "context_policy": "official_template_source_only;context_for_review",
+                                      "template_sha": TEMPLATE_SHA, "template_mode": "local" if self._local_template else "embedded"}

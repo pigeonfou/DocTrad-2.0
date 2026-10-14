@@ -7,7 +7,7 @@ version = "2.0.0"
 description = "Offline document translation with native reconstruction and BC-250 Vulkan inference"
 requires-python = ">=3.12"
 license = "AGPL-3.0-or-later"
-dependencies = ["fastapi==0.143.1", "uvicorn==0.54.0", "sqlalchemy==2.1.4", "psycopg[binary]==3.3.6", "python-multipart==0.0.32", "itsdangerous==2.2.0", "argon2-cffi==25.1.0", "httpx==0.28.1", "pydantic==2.14.1", "PyMuPDF==1.26.6", "python-docx==1.2.0", "python-pptx==1.0.2"]
+dependencies = ["fastapi==0.143.1", "uvicorn==0.54.0", "sqlalchemy==2.1.4", "psycopg[binary]==3.3.6", "python-multipart==0.0.32", "itsdangerous==2.2.0", "argon2-cffi==25.1.0", "httpx==0.28.1", "jinja2==3.1.6", "pydantic==2.14.1", "PyMuPDF==1.26.6", "python-docx==1.2.0", "python-pptx==1.0.2"]
 [project.optional-dependencies]
 test = ["pytest==9.1.1", "ruff==0.17.0"]
 semantic = ["docling>=2.59,<3"]
@@ -16,7 +16,7 @@ doctrad2 = "doctrad2.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 [tool.setuptools.package-data]
-doctrad2 = ["static/*"]
+doctrad2 = ["static/*", "templates/*.jinja", "templates/NOTICE"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

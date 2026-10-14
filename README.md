@@ -19,7 +19,7 @@ Application de traduction documentaire locale anglais → français, avec **BC-2
 
 Il s’agit de la première implémentation fonctionnelle de la nouvelle architecture, pas d’une certification de qualité sur tous les PDF. Les tests locaux utilisent une inference simulée explicitement pour le parcours applicatif ; ils ne mesurent pas la vitesse ni la qualité réelle de la BC-250.
 
-Le moteur doit exposer le template TranslateGemma et les endpoints natifs requis. Le simple fait qu’un binaire existe ne valide pas cette compatibilité. Le diagnostic refuse un modèle incompatible au lieu de passer silencieusement par Unsloth.
+Le moteur doit exposer les endpoints natifs requis. Si son GGUF est Content-only, V2 rend localement le template de référence TranslateGemma, puis utilise le tokenizer réel. Le simple fait qu’un binaire existe ne valide pas cette compatibilité. Le diagnostic refuse un modèle incompatible au lieu de passer silencieusement par Unsloth. Voir [compatibilité du template](docs/TEMPLATE.md).
 
 Le contexte documentaire est conservé pour les contrôles et la révision ; le profil spécialisé envoie au traducteur uniquement le contenu source avec son template officiel. **L’enrichissement automatique du prompt et la revue sémantique par un second modèle ne sont pas activés ni présentés comme déjà validés.** Le glossaire sert actuellement au contrôle. La postédition multimodèle nécessite un benchmark et une gestion séquentielle des modèles sur la seule BC-250.
 
