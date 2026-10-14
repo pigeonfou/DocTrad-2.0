@@ -1,6 +1,7 @@
 import re
 import time
 import httpx
+import ssl
 from .domain import ModelContract
 from .prompts import render, TEMPLATE_SHA
 
@@ -16,7 +17,10 @@ class LlamaTranslator:
             raise InferenceError("model_and_runtime_sha_required")
         self.contract = ModelContract(model_sha=settings.model_sha, runtime_sha=settings.runtime_sha,
                                       input_tokens=settings.input_tokens, output_tokens=settings.output_tokens)
-        self.client = httpx.Client(base_url=settings.llm_url.rstrip("/"), timeout=90,
+        tls = ssl.create_default_context(cafile=settings.llm_ca or None)
+        if settings.client_cert and settings.client_key:
+            tls.load_cert_chain(settings.client_cert, settings.client_key)
+        self.client = httpx.Client(verify=tls,base_url=settings.llm_url.rstrip("/"), timeout=90,
                                    headers={"Authorization": f"Bearer {settings.llm_key}"} if settings.llm_key else {},
                                    trust_env=False, follow_redirects=False, transport=transport)
         self._validated = False

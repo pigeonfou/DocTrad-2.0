@@ -19,6 +19,9 @@ class Settings:
     secure_cookie: bool = True
     tessdata: str = ""
     docling_models: str = ""
+    client_cert: str = ""
+    client_key: str = ""
+    llm_ca: str = ""
 
     def __post_init__(self):
         if len(self.secret) < 32:
@@ -48,4 +51,6 @@ class Settings:
                    llm_key=os.getenv("DOCTRAD2_LLM_KEY", ""), model_sha=os.getenv("DOCTRAD2_MODEL_SHA", ""),
                    runtime_sha=os.getenv("DOCTRAD2_RUNTIME_SHA", ""),
                    secure_cookie=os.getenv("DOCTRAD2_SECURE_COOKIE", "1") == "1",
-                   tessdata=os.getenv("TESSDATA_PREFIX", ""), docling_models=os.getenv("DOCTRAD2_DOCLING_MODELS", ""))
+                   tessdata=os.getenv("TESSDATA_PREFIX", ""), docling_models=os.getenv("DOCTRAD2_DOCLING_MODELS", ""),
+                   client_cert=os.getenv("DOCTRAD2_CLIENT_CERT", ""), client_key=os.getenv("DOCTRAD2_CLIENT_KEY", ""),
+                   llm_ca=os.getenv("DOCTRAD2_LLM_CA", ""))
