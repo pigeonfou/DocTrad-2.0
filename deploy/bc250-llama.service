@@ -1,0 +1,15 @@
+[Unit]
+Description=DocTrad 2 BC-250 existing llama.cpp Vulkan runtime
+After=network.target
+[Service]
+Type=simple
+User=bc
+EnvironmentFile=/etc/doctrad2/bc250.env
+ExecStart=/usr/bin/python3 /opt/doctrad2/current/scripts/bc250_runtime.py launch --binary ${LLAMA_BINARY} --model ${LLAMA_MODEL} --key-file ${LLAMA_KEY_FILE} --host ${LLAMA_HOST} --port 8098
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+[Install]
+WantedBy=multi-user.target

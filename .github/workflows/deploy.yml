@@ -1,0 +1,31 @@
+name: DocTrad2 deploy
+on:
+  workflow_run:
+    workflows: [DocTrad2 checks]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: doctrad2-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'pigeonfou/DocTrad-2.0' && vars.DOCTRAD2_DEPLOY_ENABLED == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64, doctrad2-deploy]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/github-script@v7
+        id: current
+        with:
+          script: |
+            const b = await github.rest.repos.getBranch({...context.repo, branch:'main'});
+            core.setOutput('current', String(b.data.commit.sha === context.payload.workflow_run.head_sha));
+      - if: steps.current.outputs.current == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - if: steps.current.outputs.current == 'true'
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: sudo -n /usr/local/sbin/doctrad2-deploy "$TESTED_SHA"

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Install as root-owned /usr/local/sbin/doctrad2-deploy, allow ONLY this command in runner sudoers.
+set -euo pipefail
+[[ $EUID == 0 ]] || exit 1
+SHA=${1:-}
+[[ $SHA =~ ^[0-9a-f]{40}$ ]] || exit 2
+SOURCE=/usr/local/src/DocTrad-2.0
+[[ -d $SOURCE/.git ]] || { echo 'Protected repository checkout missing'; exit 2; }
+[[ $(stat -c %u "$SOURCE") == 0 ]] || { echo 'Checkout must be root-owned'; exit 2; }
+[[ $(git -C "$SOURCE" remote get-url origin) == https://github.com/pigeonfou/DocTrad-2.0.git ]] || exit 2
+git -C "$SOURCE" fetch origin main
+[[ $(git -C "$SOURCE" rev-parse origin/main) == "$SHA" ]] || { echo 'Superseded or unapproved SHA'; exit 2; }
+TEMP=$(mktemp -d)
+trap 'rm -rf "$TEMP"' EXIT
+git -C "$SOURCE" archive "$SHA" | tar -x -C "$TEMP"
+# Installer reads archive source but archives exact SHA from the protected checkout.
+DOCTRAD2_SOURCE="$SOURCE" bash "$TEMP/scripts/install.sh" "$SHA"

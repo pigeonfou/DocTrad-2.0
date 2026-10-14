@@ -1,0 +1,23 @@
+name: DocTrad2 checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python: ['3.12', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e '.[test]'
+      - run: ruff check src tests scripts/bc250_runtime.py
+      - run: pytest -q
+      - run: bash -n scripts/install.sh scripts/backup.sh scripts/rollback.sh
+      - run: python -m compileall -q src scripts

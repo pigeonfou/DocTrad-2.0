@@ -1,0 +1,50 @@
+{
+  "AN_PRC_167_native": {
+    "source_sha": "cc6a5ca2bd9fad41fce19136afd7aaca3315a783a52348a4984bf11d8b8e41f6",
+    "mode": "source_identity_no_inference",
+    "model": null,
+    "nodes": 110,
+    "seconds": {
+      "extraction": 1.136150419999467,
+      "translation": 4.078900019521825e-05,
+      "reconstruction_qa": 0.3505730710003263
+    },
+    "quality_blocked": true,
+    "findings_by_code": {
+      "table_candidate_rejected": 1,
+      "rotated_text": 1
+    }
+  },
+  "TSM_without_OCR": {
+    "source_sha": "9bc58a21ffa56f89dcec9e201f17d77b606135462a9c23b8e23fc274467b9e4b",
+    "mode": "source_identity_no_inference",
+    "model": null,
+    "nodes": 0,
+    "seconds": {
+      "extraction": 0.014817197999946075,
+      "translation": 1.1559995982679538e-06,
+      "reconstruction_qa": 0.2920264980002685
+    },
+    "quality_blocked": true,
+    "findings_by_code": {
+      "ocr_required": 2,
+      "empty_extraction": 1
+    }
+  },
+  "TSM_with_local_Tesseract": {
+    "source_sha": "9bc58a21ffa56f89dcec9e201f17d77b606135462a9c23b8e23fc274467b9e4b",
+    "mode": "source_identity_no_inference",
+    "model": null,
+    "nodes": 61,
+    "seconds": {
+      "extraction": 19.31216230100017,
+      "translation": 0.00011156199980177917,
+      "reconstruction_qa": 0.29927683000005345
+    },
+    "quality_blocked": false,
+    "findings_by_code": {
+      "scan_review": 2
+    }
+  },
+  "note": "Extraction/reconstruction identity tests only; no actual BC250 inference or quality score."
+}

@@ -1,0 +1,19 @@
+[Unit]
+Description=DocTrad 2.0 local web interface
+After=network.target postgresql.service
+[Service]
+User=doctrad2
+Group=doctrad2
+EnvironmentFile=/etc/doctrad2/app.env
+WorkingDirectory=/var/lib/doctrad2
+ExecStart=/opt/doctrad2/current/.venv/bin/doctrad2 serve
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/doctrad2
+UMask=0077
+[Install]
+WantedBy=multi-user.target
