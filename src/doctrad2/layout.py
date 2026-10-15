@@ -55,7 +55,7 @@ def placement_box(node, page, nodes):
     if node.kind == 'table_cell' and 'cell_bbox' in node.locator:
         cell = fitz.Rect(node.locator['cell_bbox'])
         return cell + (1, 1, -1, -1)
-    if node.locator.get('text_rotation', 0):
+    if node.locator.get('text_rotation', 0) or abs(node.locator.get('text_angle', 0)) > 1:
         return original
     size, _, _ = source_style(node)
     # Leave a physical gutter between text columns, and never cross an image/background edge.

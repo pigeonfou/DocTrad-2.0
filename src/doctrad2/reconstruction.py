@@ -23,6 +23,9 @@ def pdf_build(data, ir, translations):
                 if target == node.text:
                     continue
                 rotation = node.locator.get("text_rotation", 0)
+                angle = node.locator.get('text_angle', rotation)
+                angled = abs((angle - rotation + 180) % 360 - 180) > 1
+                angle_pdf = None
                 rect = fitz.Rect(node.bbox)
                 if rect.is_empty or not page.rect.contains(rect):
                     report.findings.append(Finding(code="invalid_bounds", severity="critical", unit_id=node.id, detail="Zone source hors page"))
@@ -33,6 +36,24 @@ def pdf_build(data, ir, translations):
                 # A second translated block may already occupy otherwise blank space.
                 if any((rect & placed[1]).get_area() > .5 for placed in placements):
                     rect = fitz.Rect(node.bbox)
+                if angled and node.locator.get('aligned_size'):
+                    width, height = node.locator['aligned_size']
+                    probe = fitz.open()
+                    scratch = probe.new_page(width=max(1, width), height=max(1, height + 2))
+                    spare, scale = scratch.insert_htmlbox(scratch.rect, markup, css=style, scale_low=.85)
+                    if spare >= 0:
+                        angle_pdf = probe.tobytes()
+                    probe.close()
+                    if angle_pdf is None:
+                        report.findings.append(Finding(code='overflow', severity='critical', unit_id=node.id,
+                                                       detail='Le texte incliné ne tient pas dans son cadre'))
+                        continue
+                    if any((rect & placed[1]).get_area() > .5 for placed in placements):
+                        report.findings.append(Finding(code='source_overlap', severity='critical', unit_id=node.id,
+                                                       detail='La zone inclinée intersecte un bloc traduit'))
+                        continue
+                    placements.append((node, rect, markup, style, angle, angle_pdf))
+                    continue
                 probe = fitz.open()
                 try:
                     scratch = probe.new_page(width=p.width, height=p.height)
@@ -61,25 +82,30 @@ def pdf_build(data, ir, translations):
                         report.findings.append(Finding(code="source_overlap", severity="critical", unit_id=node.id,
                                                        detail="La zone intersecte un autre bloc source"))
                         continue
-                    placements.append((node, rect, markup, style, rotation))
+                    placements.append((node, rect, markup, style, rotation, None))
             if not p.scanned:
                 # Keep navigation out of the redaction pass: MuPDF otherwise deletes intersecting links.
                 if placements:
                     for link in original_links:
                         page.delete_link(link)
-                for node, rect, _, _, _ in placements:
+                for node, rect, _, _, _, _ in placements:
                     # Character boxes rather than an expanded paragraph rectangle reduce collateral removals.
                     for run in node.runs:
                         page.add_redact_annot(fitz.Rect(run.bbox), fill=False, cross_out=False)
                 if placements:
                     page.apply_redactions(images=0, graphics=0, text=0)
-            for node, rect, markup, style, rotation in placements:
+            for node, rect, markup, style, rotation, angle_pdf in placements:
                 if p.scanned:
                     # Image is preserved. White masking is explicitly non-certified for nonuniform backgrounds.
                     page.draw_rect(rect, color=None, fill=(1, 1, 1), overlay=True)
                     report.findings.append(Finding(code="scan_mask", severity="review", unit_id=node.id,
                                                    detail="Masque blanc sur image : inspection obligatoire du fond et du schéma"))
-                spare, scale = page.insert_htmlbox(rect, markup, css=style, scale_low=.85, rotate=rotation)
+                if angle_pdf is not None:
+                    with fitz.open(stream=angle_pdf, filetype='pdf') as angled_page:
+                        page.show_pdf_page(rect, angled_page, rotate=rotation, keep_proportion=True)
+                    spare = 0
+                else:
+                    spare, scale = page.insert_htmlbox(rect, markup, css=style, scale_low=.85, rotate=rotation)
                 if spare < 0:
                     report.findings.append(Finding(code="composition_failed", severity="critical", unit_id=node.id, detail="Échec de composition après simulation"))
                 else:

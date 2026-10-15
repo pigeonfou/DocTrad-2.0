@@ -50,7 +50,7 @@ class DocumentIR(BaseModel):
     schema_version: Literal["2.0.0"] = "2.0.0"
     source_sha: str
     format: Literal["pdf", "docx", "pptx"]
-    extractor_version: str = "native-2.0.0"
+    extractor_version: str = "native-2.1.0"
     pages: list[Page] = Field(default_factory=list)
     nodes: list[Node] = Field(default_factory=list)
     navigation: dict = Field(default_factory=dict)

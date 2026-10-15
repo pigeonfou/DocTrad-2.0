@@ -106,3 +106,50 @@ def test_phantom_table_column_does_not_clip_an_independent_label(monkeypatch):
     label = next(n for n in ir.nodes if n.text == 'Emergency pressure limit')
     assert fitz.Rect(label.locator['cell_bbox']).contains(fitz.Rect(label.bbox))
     assert label.locator['cell_bbox'][2] == 240
+
+
+def test_emphasized_terms_use_source_derived_official_conversation_examples(settings):
+    prompts = []
+    def handler(request):
+        body = json.loads(request.content) if request.content else {}
+        if request.url.path == '/props':
+            return httpx.Response(200, json={'model_path': 'translategemma-12b-it.gguf', 'default_generation_settings': {'n_ctx': 4096}})
+        if request.url.path == '/tokenize':
+            prompts.append(body['content'])
+            return httpx.Response(200, json={'tokens': [1, 2]})
+        return httpx.Response(200, json={'content': 'HAUTE TENSION' if len(prompts) == 1 else 'Attention à la HAUTE TENSION.'})
+    translator = LlamaTranslator(settings, httpx.MockTransport(handler))
+    target, provenance = translator.translate('Beware of HIGH VOLTAGE.')
+    assert 'HAUTE TENSION' in target
+    assert provenance['terminology_examples'] == [('HIGH VOLTAGE', 'HAUTE TENSION')]
+    assert any(__import__('re').search(r'<start_of_turn>model\s+HAUTE TENSION<end_of_turn>', p) for p in prompts)
+    assert all('Beware of HIGH VOLTAGE.' not in p or 'professional English' in p for p in prompts)
+
+
+def test_unit_restoration_is_source_backed_and_refuses_ambiguity_or_conversion():
+    from doctrad2.fidelity import restore_unambiguous_units
+    target, repairs = restore_unambiguous_units('Dimensions 2 H x 4 W x 6 D in', 'Dimensions 2 cm x 4 cm x 6 cm')
+    assert target == 'Dimensions 2 in x 4 in x 6 in'
+    assert len(repairs) == 3
+    assert restore_unambiguous_units('Length 1000 m', 'Longueur 1 km') == ('Longueur 1 km', [])
+    assert restore_unambiguous_units('Input 12 V and output 12 A', 'Entrée 12 A et sortie 12 V') == ('Entrée 12 A et sortie 12 V', [])
+    assert restore_unambiguous_units('Pressure 8 Pa', 'Pression 9 A') == ('Pression 9 A', [])
+
+
+@pytest.mark.parametrize('angle', [12, 45, 315])
+def test_nonorthogonal_vector_text_is_translated_without_flattening(angle):
+    from doctrad2.extraction import extract
+    from doctrad2.reconstruction import build
+    doc = fitz.open()
+    page = doc.new_page(width=500, height=600)
+    page.insert_text((200, 300), 'Safety tested', fontsize=14, morph=(fitz.Point(200, 300), fitz.Matrix(angle)))
+    source = doc.tobytes()
+    ir = extract(source, 'pdf')
+    assert ir.nodes[0].translatable
+    result, report = build(source, ir, {ir.nodes[0].id: 'Sécurité testée'})
+    assert not report.blocked, report.findings
+    with fitz.open(stream=result, filetype='pdf') as output:
+        text = output[0].get_text()
+        assert 'Safety' not in text
+        assert 'curité' in text
+        assert not output[0].get_images()

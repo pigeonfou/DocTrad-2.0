@@ -3,7 +3,7 @@ import threading
 import time
 from sqlalchemy import select
 from .db import Job, Unit, Document, Cache
-from .domain import DocumentIR, ModelContract
+from .domain import DocumentIR, ModelContract, Finding
 from .storage import Artifacts, key
 from .extraction import extract
 from .inference import LlamaTranslator
@@ -134,6 +134,12 @@ class Pipeline:
         for unit in units:
             if unit.node_id in translations:
                 report.findings.extend(check_text(unit.source, unit.target, unit.node_id, glossary))
+                for chunk in unit.provenance.get('chunks', []):
+                    attempts = chunk.get('attempts', [])
+                    chosen = chunk.get('selected_attempt', 0)
+                    if attempts and attempts[chosen].get('unit_repairs'):
+                        report.findings.append(Finding(code='source_unit_restored', severity='review', unit_id=unit.node_id,
+                                                       detail='Unité restaurée depuis une valeur source inchangée ; candidat brut conservé'))
         if fmt == "pdf":
             report = validate_pdf(source, result, report)
         artifacts["output"] = self.store.put(result)

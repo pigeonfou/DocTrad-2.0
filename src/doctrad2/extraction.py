@@ -9,7 +9,7 @@ from .storage import digest, key
 
 
 def node_id(source_sha, locator):
-    return key([source_sha, "native-2.0.0", locator])
+    return key([source_sha, "native-2.1.0", locator])
 
 
 def extract_pdf(data, tessdata=""):
@@ -86,9 +86,16 @@ def extract_pdf(data, tessdata=""):
                     angle = (-math.degrees(math.atan2(direction[1], direction[0]))) % 360
                     cardinal = min((0, 90, 180, 270, 360), key=lambda a: abs(a - angle))
                     locator["text_rotation"] = cardinal % 360
+                    locator["text_angle"] = round(angle, 4)
                     gkey = (hit[1], hit[2], hit[3]) if hit else (bi, cardinal)
                     group = groups.setdefault(gkey, {"runs": [], "lines": [], "boxes": [], "locator": locator,
-                                                    "hit": hit, "rotated": False})
+                                                    "hit": hit, "rotated": False, "aligned_boxes": []})
+                    for span in line['spans']:
+                        if span['text'].strip():
+                            quad = fitz.recover_quad(direction, span)
+                            points = [point * fitz.Matrix(angle) for point in quad]
+                            group['aligned_boxes'].append(fitz.Rect(min(p.x for p in points), min(p.y for p in points),
+                                                                   max(p.x for p in points), max(p.y for p in points)))
                     group["runs"].extend(runs)
                     group["lines"].append("".join(r.text for r in runs))
                     group["boxes"].append(bbox)
@@ -100,6 +107,11 @@ def extract_pdf(data, tessdata=""):
                     bbox |= rect
                 hit = group["hit"]
                 locator = group["locator"] | ({"row": hit[2], "column": hit[3], "table": hit[1], "cell_bbox": list(hit[0])} if hit else {})
+                if group['rotated'] and group['aligned_boxes']:
+                    aligned = fitz.Rect(group['aligned_boxes'][0])
+                    for box in group['aligned_boxes'][1:]:
+                        aligned |= box
+                    locator['aligned_size'] = [aligned.width, aligned.height]
                 nid = node_id(ir.source_sha, locator)
                 sizes = [r.size for r in group["runs"]]
                 if not hit and len(text) < 120 and max(sizes) > 13:
@@ -107,10 +119,10 @@ def extract_pdf(data, tessdata=""):
                 ir.nodes.append(Node(id=nid, page=number, text=text, bbox=tuple(bbox), runs=group["runs"],
                                      kind="table_cell" if hit else "paragraph", parent=hit[1] if hit else None,
                                      locator=locator, context={"section": section}, engine=engine,
-                                     translatable=not group["rotated"]))
+                                     translatable=True))
                 if group["rotated"]:
-                    ir.findings.append(Finding(code="rotated_text", severity="critical", unit_id=nid,
-                                               detail="Angle non orthogonal : conserver la source et réviser cette zone"))
+                    ir.findings.append(Finding(code="rotated_text", severity="review", unit_id=nid,
+                                               detail="Texte incliné recomposé vectoriellement : vérifier orientation et espacement"))
             page.set_rotation(original_rotation)
         if len(ir.nodes) > 20000:
             raise ValueError("too_many_units")

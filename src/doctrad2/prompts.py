@@ -17,9 +17,18 @@ def template():
     return env.from_string(TEMPLATE_PATH.read_text())
 
 
-def render(text):
-    if any(token in text for token in ('<bos>', '<eos>', '<start_of_turn>', '<end_of_turn>')):
+def messages(text, examples=()):
+    values = [text] + [value for pair in examples for value in pair]
+    if any(token in value for value in values for token in ('<bos>', '<eos>', '<start_of_turn>', '<end_of_turn>')):
         raise ValueError('reserved_template_token_in_source')
-    return template().render(bos_token='<bos>', add_generation_prompt=True,
-                             messages=[{'role': 'user', 'content': [{'type': 'text', 'source_lang_code': 'en',
-                                        'target_lang_code': 'fr', 'text': text}]}])
+    def user(source):
+        return {'role': 'user', 'content': [{'type': 'text', 'source_lang_code': 'en',
+                                            'target_lang_code': 'fr', 'text': source}]}
+    conversation = []
+    for source, target in examples:
+        conversation.extend([user(source), {'role': 'assistant', 'content': target}])
+    return conversation + [user(text)]
+
+
+def render(text, examples=()):
+    return template().render(bos_token='<bos>', add_generation_prompt=True, messages=messages(text, examples))

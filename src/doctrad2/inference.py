@@ -3,9 +3,10 @@ import time
 import httpx
 import ssl
 from .domain import ModelContract
-from .prompts import render, TEMPLATE_SHA
+from .prompts import render, messages, TEMPLATE_SHA
 from .text_policy import translation_source, sentence_parts, POLICY_VERSION
 from .quality import check_text
+from .fidelity import restore_unambiguous_units
 
 
 class InferenceError(RuntimeError):
@@ -25,6 +26,8 @@ class LlamaTranslator:
         self.client = httpx.Client(verify=tls,base_url=settings.llm_url.rstrip("/"), timeout=90,
                                    headers={"Authorization": f"Bearer {settings.llm_key}"} if settings.llm_key else {},
                                    trust_env=False, follow_redirects=False, transport=transport)
+        self.examples = []
+        self.term_cache = {}
         self._validated = False
         self._local_template = False
 
@@ -63,10 +66,8 @@ class LlamaTranslator:
 
     def prompt(self, text):
         if self._local_template:
-            return render(text)
-        messages = [{"role": "user", "content": [{"type": "text", "source_lang_code": "en",
-                                                      "target_lang_code": "fr", "text": text}]}]
-        result = self.request("/apply-template", {"messages": messages, "add_generation_prompt": True})
+            return render(text, self.examples)
+        result = self.request("/apply-template", {"messages": messages(text, self.examples), "add_generation_prompt": True})
         prompt = result.get("prompt")
         if not isinstance(prompt, str):
             raise InferenceError("template_endpoint_required")
@@ -110,6 +111,25 @@ class LlamaTranslator:
         if not self._validated:
             self.validate()
         source_text = translation_source(text)
+        self.examples = []
+        # Short emphasized phrases are translated independently, then supplied as
+        # normal user/assistant examples using the official conversation schema.
+        # These terms are derived from this source, never a document wordlist.
+        terms = re.findall(r"\b[A-Z]{2,}(?:[ -]+[A-Z]{2,}){1,3}\b", source_text)
+        for term in dict.fromkeys(terms):
+            if term == source_text or len(term) > 60 or len(self.examples) >= 3:
+                continue
+            if term not in self.term_cache:
+                prior = self.examples
+                self.examples = []
+                try:
+                    translated_term, _ = self.complete(self.prompt(term))
+                finally:
+                    self.examples = prior
+                if not any(f.severity == 'critical' for f in check_text(term, translated_term, '')):
+                    self.term_cache[term] = translated_term
+            if term in self.term_cache:
+                self.examples.append((term, self.term_cache[term]))
         bullet = re.match(r"^([>•›])\s+(?=[A-Za-z])", source_text)
         prefix = bullet.group() if bullet else ''
         if prefix:
@@ -118,12 +138,14 @@ class LlamaTranslator:
         # Keep complete sentences, not visual PDF lines, as inference units.
         for sentence in sentence_parts(source_text):
             for source, prompt in self.chunks(sentence):
-                target, info = self.complete(prompt)
-                candidates = [{"target": target, "generation": info}]
+                raw, info = self.complete(prompt)
+                target, repairs = restore_unambiguous_units(source, raw)
+                candidates = [{"target": target, "raw_target": raw, "unit_repairs": repairs, "generation": info}]
                 findings = check_text(source, target, '')
                 if any(f.severity == 'critical' for f in findings) or (len(source) < 120 and len(target) > max(30, len(source) * 1.6)):
                     alternate, alternate_info = self.complete(prompt, temperature=.2, seed=43)
-                    candidates.append({"target": alternate, "generation": alternate_info})
+                    corrected, repairs = restore_unambiguous_units(source, alternate)
+                    candidates.append({"target": corrected, "raw_target": alternate, "unit_repairs": repairs, "generation": alternate_info})
                 def rank(candidate):
                     issues = check_text(source, candidate['target'], '')
                     return (sum(f.severity == 'critical' for f in issues),
@@ -133,9 +155,9 @@ class LlamaTranslator:
                 outputs.append(target)
                 provenance.append({"source_length": len(source), **candidates[selected]['generation'],
                                    "selected_attempt": selected, "attempts": [
-                                       {**candidate['generation'], "findings": [f.code for f in check_text(source, candidate['target'], '')]}
+                                       {**candidate['generation'], "raw_target": candidate['raw_target'], "target": candidate['target'], "unit_repairs": candidate['unit_repairs'], "findings": [f.code for f in check_text(source, candidate['target'], '')]}
                                        for candidate in candidates]})
         return prefix + " ".join(outputs), {"contract": self.contract.model_dump(), "chunks": provenance,
                                       "context_policy": "official_template_complete_sentences;context_for_review",
-                                      "translation_policy": POLICY_VERSION,
+                                      "translation_policy": POLICY_VERSION, "terminology_examples": self.examples,
                                       "template_sha": TEMPLATE_SHA, "template_mode": "local" if self._local_template else "embedded"}
