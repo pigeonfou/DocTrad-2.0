@@ -1,6 +1,7 @@
 from typing import Literal
 from pydantic import BaseModel, Field
 from .prompts import TEMPLATE_SHA
+from .text_policy import POLICY_VERSION
 
 
 class Finding(BaseModel):
@@ -13,6 +14,7 @@ class Finding(BaseModel):
 class Run(BaseModel):
     text: str
     bbox: tuple[float, float, float, float]
+    origin: tuple[float, float] | None = None
     font: str = ""
     size: float = 10
     color: int = 0
@@ -56,6 +58,7 @@ class DocumentIR(BaseModel):
 
 
 class ModelContract(BaseModel):
+    translation_policy: str = POLICY_VERSION
     name: str = "translategemma-12b-it.Q4_K_M.gguf"
     model_sha: str
     runtime_sha: str

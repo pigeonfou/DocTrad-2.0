@@ -1,10 +1,10 @@
 from io import BytesIO
-import html
 import zipfile
 from lxml import etree
 import pymupdf as fitz
 from .domain import QualityReport, Finding
 from .extraction import xml_text_elements
+from .layout import placement_box, text_markup
 
 
 def pdf_build(data, ir, translations):
@@ -27,27 +27,25 @@ def pdf_build(data, ir, translations):
                 if rect.is_empty or not page.rect.contains(rect):
                     report.findings.append(Finding(code="invalid_bounds", severity="critical", unit_id=node.id, detail="Zone source hors page"))
                     continue
-                # Only remove original text after proving the French fits on a scratch page.
-                size = max(1, min(r.size for r in node.runs)) if node.runs else 10
-                color = node.runs[0].color if node.runs else 0
-                others = [fitz.Rect(n.bbox) for n in ir.nodes if n.page == node.page and n.id != node.id and n.bbox]
-                if node.kind == "table_cell" and "cell_bbox" in node.locator:
-                    cell = fitz.Rect(node.locator["cell_bbox"])
-                    rect = fitz.Rect(max(rect.x0, cell.x0 + 1), max(rect.y0, cell.y0 + 1), cell.x1 - 1, cell.y1 - 1)
-                elif rotation == 0:
-                    right = min(page.rect.x1 - 12, rect.x1 + max(size * 4, rect.width * .5))
-                    for obstacle in others:
-                        if obstacle.y0 < rect.y1 and obstacle.y1 > rect.y0 and obstacle.x0 >= rect.x1:
-                            right = min(right, obstacle.x0 - 1)
-                    extended = fitz.Rect(rect.x0, rect.y0, max(rect.x1, right), rect.y1 + size * .3)
-                    if not any((extended & o).get_area() > .5 for o in others):
-                        rect = extended
-                style = f"body {{margin:0;padding:0;line-height:1.05;font-family:sans-serif;font-size:{size}pt;color:#{color:06x};}}"
-                markup = "<div>" + html.escape(target).replace("\n", "<br>") + "</div>"
+                page_nodes = [n for n in ir.nodes if n.page == node.page]
+                rect = placement_box(node, page, page_nodes)
+                markup, style = text_markup(node, target)
+                # A second translated block may already occupy otherwise blank space.
+                if any((rect & placed[1]).get_area() > .5 for placed in placements):
+                    rect = fitz.Rect(node.bbox)
                 probe = fitz.open()
                 try:
                     scratch = probe.new_page(width=p.width, height=p.height)
                     spare, scale = scratch.insert_htmlbox(rect, markup, css=style, scale_low=.85, rotate=rotation)
+                    if spare >= 0 and not rotation and node.kind != 'table_cell' and node.runs and node.runs[0].origin:
+                        spans = [s for block in scratch.get_text('dict')['blocks'] if block['type'] == 0
+                                 for line in block['lines'] for s in line['spans']]
+                        if spans:
+                            delta = node.runs[0].origin[1] - spans[0]['origin'][1]
+                            if 0 < delta < node.runs[0].size and rect.height - delta > node.runs[0].size:
+                                rect = rect + (0, delta, 0, 0)
+                                scratch = probe.new_page(width=p.width, height=p.height)
+                                spare, scale = scratch.insert_htmlbox(rect, markup, css=style, scale_low=.85, rotate=rotation)
                 finally:
                     probe.close()
                 if spare < 0:
@@ -101,7 +99,7 @@ def pdf_build(data, ir, translations):
         if [len(page.get_links()) for page in reopened] != ir.navigation.get("links", []):
             report.findings.append(Finding(code="links", severity="critical", detail="Liens perdus ou ajoutés"))
     report.metrics = {"pages": len(ir.pages), "composed_units": translated, "native_graphics_preserved": not any(f.code == "graphics_lost" for f in report.findings),
-                      "text_masks": masks, "font_policy": "local_html_fallback;max_15pct_reduction"}
+                      "text_masks": masks, "font_policy": "weighted_source_style;bounded_columns;max_15pct_reduction"}
     return result, report
 
 

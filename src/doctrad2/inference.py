@@ -4,6 +4,8 @@ import httpx
 import ssl
 from .domain import ModelContract
 from .prompts import render, TEMPLATE_SHA
+from .text_policy import translation_source, sentence_parts, POLICY_VERSION
+from .quality import check_text
 
 
 class InferenceError(RuntimeError):
@@ -89,26 +91,51 @@ class LlamaTranslator:
         midpoint = min(boundaries, key=lambda i: abs(i - len(text) / 2))
         return self.chunks(text[:midpoint].strip()) + self.chunks(text[midpoint:].strip())
 
+    def complete(self, prompt, temperature=0, seed=42):
+        tokenized = self.request("/tokenize", {"content": prompt, "add_special": False, "parse_special": True})
+        tokens = tokenized.get("tokens")
+        if not isinstance(tokens, list) or not tokens:
+            raise InferenceError("tokenizer_endpoint_required")
+        result = self.request("/completion", {"prompt": tokens, "n_predict": self.contract.output_tokens,
+                              "temperature": temperature, "seed": seed, "cache_prompt": True, "stream": False})
+        if result.get("stopped_limit") or result.get("truncated") or result.get("stop_type") == "limit":
+            raise InferenceError("translation_truncated")
+        target = result.get("content")
+        if not isinstance(target, str) or not target.strip():
+            raise InferenceError("empty_translation")
+        return target.strip(), {"input_tokens": len(tokens), "output_tokens": result.get("tokens_predicted"),
+                                "timings": result.get("timings", {})}
+
     def translate(self, text):
         if not self._validated:
             self.validate()
-        outputs = []
-        provenance = []
-        for source, prompt in self.chunks(text):
-            tokenized = self.request("/tokenize", {"content": prompt, "add_special": False, "parse_special": True})
-            prompt_tokens = tokenized.get("tokens")
-            if not isinstance(prompt_tokens, list) or not prompt_tokens:
-                raise InferenceError("tokenizer_endpoint_required")
-            result = self.request("/completion", {"prompt": prompt_tokens, "n_predict": self.contract.output_tokens,
-                                  "temperature": 0, "seed": 42, "cache_prompt": True, "stream": False})
-            if result.get("stopped_limit") or result.get("truncated") or result.get("stop_type") == "limit":
-                raise InferenceError("translation_truncated")
-            target = result.get("content")
-            if not isinstance(target, str) or not target.strip():
-                raise InferenceError("empty_translation")
-            outputs.append(target.strip())
-            provenance.append({"source_length": len(source), "input_tokens": self.token_count(prompt),
-                               "output_tokens": result.get("tokens_predicted"), "timings": result.get("timings", {})})
-        return "\n".join(outputs), {"contract": self.contract.model_dump(), "chunks": provenance,
-                                      "context_policy": "official_template_source_only;context_for_review",
+        source_text = translation_source(text)
+        bullet = re.match(r"^([>•›])\s+(?=[A-Za-z])", source_text)
+        prefix = bullet.group() if bullet else ''
+        if prefix:
+            source_text = source_text[len(prefix):]
+        outputs, provenance = [], []
+        # Keep complete sentences, not visual PDF lines, as inference units.
+        for sentence in sentence_parts(source_text):
+            for source, prompt in self.chunks(sentence):
+                target, info = self.complete(prompt)
+                candidates = [{"target": target, "generation": info}]
+                findings = check_text(source, target, '')
+                if any(f.severity == 'critical' for f in findings) or (len(source) < 120 and len(target) > max(30, len(source) * 1.6)):
+                    alternate, alternate_info = self.complete(prompt, temperature=.2, seed=43)
+                    candidates.append({"target": alternate, "generation": alternate_info})
+                def rank(candidate):
+                    issues = check_text(source, candidate['target'], '')
+                    return (sum(f.severity == 'critical' for f in issues),
+                            sum(f.severity == 'review' for f in issues), len(candidate['target']))
+                selected = min(range(len(candidates)), key=lambda index: rank(candidates[index]))
+                target = candidates[selected]['target']
+                outputs.append(target)
+                provenance.append({"source_length": len(source), **candidates[selected]['generation'],
+                                   "selected_attempt": selected, "attempts": [
+                                       {**candidate['generation'], "findings": [f.code for f in check_text(source, candidate['target'], '')]}
+                                       for candidate in candidates]})
+        return prefix + " ".join(outputs), {"contract": self.contract.model_dump(), "chunks": provenance,
+                                      "context_policy": "official_template_complete_sentences;context_for_review",
+                                      "translation_policy": POLICY_VERSION,
                                       "template_sha": TEMPLATE_SHA, "template_mode": "local" if self._local_template else "embedded"}

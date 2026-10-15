@@ -7,6 +7,7 @@ from .domain import DocumentIR, ModelContract
 from .storage import Artifacts, key
 from .extraction import extract
 from .inference import LlamaTranslator
+from .text_policy import POLICY_VERSION
 from .quality import check_text
 from .reconstruction import build, validate_pdf
 
@@ -104,7 +105,7 @@ class Pipeline:
                     if unit.target is not None or not node.translatable:
                         continue
                     ck = key({"owner": owner, "source": ir.source_sha, "ir": artifacts["ir"], "node": node.id,
-                              "context": node.context, "glossary": glossary, "model": contract, "policy": "source-only-2.0.0"})
+                              "context": node.context, "glossary": glossary, "model": contract, "policy": POLICY_VERSION})
                     cached = s.get(Cache, ck)
                 if cached:
                     target, provenance = cached.target, cached.provenance

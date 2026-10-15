@@ -68,11 +68,19 @@ def extract_pdf(data, tessdata=""):
                     continue
                 for li, line in enumerate(block["lines"]):
                     runs = [Run(text=s["text"], bbox=s["bbox"], font=s["font"], size=s["size"],
-                                color=s["color"], flags=s["flags"]) for s in line["spans"] if s["text"].strip()]
+                                color=s["color"], flags=s["flags"], origin=s.get("origin")) for s in line["spans"] if s["text"].strip()]
                     if not runs:
                         continue
                     bbox = fitz.Rect(line["bbox"])
                     hit = next((c for c in cells if c[0].contains((bbox.tl + bbox.br) / 2)), None)
+                    if hit and not (hit[0] + (-1, -1, 1, 1)).contains(bbox):
+                        # Background artwork may produce phantom columns inside a label.
+                        # Merge only adjacent cells of this row touched by the source line.
+                        touched = [c for c in cells if c[1:3] == hit[1:3] and (c[0] & bbox).get_area() > 0]
+                        merged = fitz.Rect(hit[0])
+                        for candidate in touched:
+                            merged |= candidate[0]
+                        hit = (merged, *hit[1:]) if (merged + (-1, -1, 1, 1)).contains(bbox) else None
                     locator = {"page": number, "block": bi, "line": li}
                     direction = line.get("dir", (1, 0))
                     angle = (-math.degrees(math.atan2(direction[1], direction[0]))) % 360
