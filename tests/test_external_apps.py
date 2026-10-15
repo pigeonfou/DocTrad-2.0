@@ -42,3 +42,20 @@ def test_registry_rejects_nginx_or_service_injection(tmp_path):
     path.write_text(json.dumps(value))
     with pytest.raises(ValueError):
         module.registered_apps(path)
+
+
+def test_path_routing_uses_the_client_accessible_lan_ip_without_dns_override():
+    script = Path(__file__).resolve().parents[1] / 'scripts/integrate-oneforall.py'
+    spec = importlib.util.spec_from_file_location('ofa_integration', script)
+    integration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(integration)
+    config = {'routing_mode': 'paths', 'lan_ip': '192.168.6.27', 'lan_port': 8443,
+              'domain': 'pigeonfou.com', 'certificate': '/etc/oneforall/tls/server.crt'}
+    url, options = integration.lan_endpoint(config)
+    assert url == 'https://192.168.6.27:8443/doctrad2/'
+    assert '--resolve' not in options
+    assert options == ['--cacert', config['certificate']]
+    config['routing_mode'] = 'subdomains'
+    url, options = integration.lan_endpoint(config)
+    assert url == 'https://doctrad2.pigeonfou.com:8443/'
+    assert '--resolve' in options

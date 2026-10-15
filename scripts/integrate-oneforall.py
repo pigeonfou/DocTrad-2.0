@@ -9,6 +9,15 @@ import subprocess
 import time
 
 
+def lan_endpoint(config):
+    """Path routing has an IP virtual host; no split DNS is required on clients."""
+    if config.get('routing_mode') == 'paths':
+        return f"https://{config['lan_ip']}:{config['lan_port']}/doctrad2/", ['--cacert', config['certificate']]
+    host = 'doctrad2.' + config['domain']
+    return f"https://{host}:{config['lan_port']}/", [
+        '--resolve', f"{host}:{config['lan_port']}:{config['lan_ip']}", '--cacert', config['certificate']]
+
+
 def main():
     if os.geteuid() != 0:
         raise SystemExit('Root required')
@@ -64,13 +73,11 @@ def main():
                    'public_enabled': config.get('public_enabled') and 'doctrad2' in config.get('public_apps', []),
                    'public_url': record.get('url'), 'public_status': record.get('status'),
                    'lan_url': (f"https://{config['lan_ip']}:{config['lan_port']}/doctrad2/" if config.get('routing_mode') == 'paths' else f"https://doctrad2.{config['domain']}:{config['lan_port']}/")}
-        host = ('www' if config.get('routing_mode') == 'paths' else 'doctrad2') + '.' + config['domain']
-        base = '/doctrad2/' if config.get('routing_mode') == 'paths' else '/'
-        summary['lan_url'] = f"https://{host}:{config['lan_port']}{base}"
+        summary['lan_url'], tls_args = lan_endpoint(config)
         checks = {}
-        for suffix, expected in [('', 200), ('static/app.js', 200), ('v2/session', 200), ('v2/jobs', 401)]:
+        for suffix, expected in [('', 200), ('static/app.js', 200), ('static/style.css', 200), ('v2/session', 200), ('v2/jobs', 401)]:
             probe = subprocess.run(['curl', '--noproxy', '*', '--silent', '--show-error', '--max-time', '8',
-                '--resolve', f"{host}:{config['lan_port']}:{config['lan_ip']}", '--cacert', config['certificate'],
+                *tls_args,
                 '--output', '/dev/null', '--write-out', '%{http_code}', summary['lan_url'] + suffix], capture_output=True, text=True)
             checks[suffix or 'interface'] = probe.stdout.strip()
             if probe.returncode or probe.stdout.strip() != str(expected):
