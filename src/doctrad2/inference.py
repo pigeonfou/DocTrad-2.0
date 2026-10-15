@@ -145,6 +145,7 @@ class LlamaTranslator:
             for source, prompt in self.chunks(sentence):
                 raw, info = self.complete(prompt)
                 target, repairs = restore_unambiguous_units(source, raw)
+                rejected = []
                 candidates = [{"target": target, "raw_target": raw, "unit_repairs": repairs, "generation": info}]
                 findings = check_text(source, target, '')
                 def terminology_misses(candidate):
@@ -161,16 +162,22 @@ class LlamaTranslator:
                 if min(rank(c)[0] for c in candidates) > 0:
                     masked, mapping = shield(source)
                     if mapping:
-                        masked_target, masked_info = self.complete(self.prompt(masked))
-                        restored = restore(masked_target, mapping)
-                        if restored is not None:
-                            candidates.append({"target": restored, "raw_target": masked_target, "unit_repairs": [],
-                                               "generation": {**masked_info, "literal_spans": mapping}})
+                        masked_prompt = self.prompt(masked)
+                        if self.token_count(masked_prompt) <= self.contract.input_tokens:
+                            masked_target, masked_info = self.complete(masked_prompt)
+                            restored = restore(masked_target, mapping)
+                            if restored is not None:
+                                candidates.append({"target": restored, "raw_target": masked_target, "unit_repairs": [],
+                                                   "generation": {**masked_info, "literal_spans": mapping}})
+                            else:
+                                rejected.append({**masked_info, "raw_target": masked_target, "reason": "invalid_literal_markers"})
+                        else:
+                            rejected.append({"reason": "literal_prompt_exceeds_input_budget"})
                 selected = min(range(len(candidates)), key=lambda index: rank(candidates[index]))
                 target = candidates[selected]['target']
                 outputs.append(target)
                 provenance.append({"source_length": len(source), **candidates[selected]['generation'],
-                                   "selected_attempt": selected, "attempts": [
+                                   "selected_attempt": selected, "rejected_attempts": rejected, "attempts": [
                                        {**candidate['generation'], "raw_target": candidate['raw_target'], "target": candidate['target'], "unit_repairs": candidate['unit_repairs'], "findings": [f.code for f in check_text(source, candidate['target'], '')]}
                                        for candidate in candidates]})
         return prefix + " ".join(outputs), {"contract": self.contract.model_dump(), "chunks": provenance,

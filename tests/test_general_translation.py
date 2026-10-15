@@ -219,3 +219,21 @@ def test_supervised_runtime_can_recover_during_bounded_transport_backoff(setting
     assert translator.request('/props') == {'ready': True}
     assert calls == ['/props'] * 6
     assert delays == [1, 3, 10, 20, 30]
+
+
+def test_shielded_retry_cannot_exceed_the_actual_input_token_budget(settings):
+    latest, calls = '', []
+    def handler(request):
+        nonlocal latest
+        body = json.loads(request.content) if request.content else {}
+        if request.url.path == '/props':
+            return httpx.Response(200, json={'model_path': 'translategemma-12b-it.gguf', 'default_generation_settings': {'n_ctx': 4096}})
+        if request.url.path == '/tokenize':
+            latest = body['content']
+            return httpx.Response(200, json={'tokens': list(range(1801)) if '<x id=' in latest else [1, 2]})
+        calls.append(latest)
+        return httpx.Response(200, json={'content': 'Alimentation 99 A'})
+    translator = LlamaTranslator(settings, httpx.MockTransport(handler))
+    _, provenance = translator.translate('Supply 48 V')
+    assert len(calls) == 2
+    assert provenance['chunks'][0]['rejected_attempts'] == [{'reason': 'literal_prompt_exceeds_input_budget'}]
