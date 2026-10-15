@@ -10,6 +10,7 @@ from doctrad2.config import Settings
 from doctrad2.db import Database, Document, Job, User
 from doctrad2.storage import Artifacts, digest, key
 from doctrad2.prompts import TEMPLATE_SHA
+from doctrad2.inference import LlamaTranslator
 
 SOURCE_SHA = 'cc6a5ca2bd9fad41fce19136afd7aaca3315a783a52348a4984bf11d8b8e41f6'
 
@@ -34,6 +35,11 @@ def main():
             job = Job(id=jid, document_id=document.id, owner=owner)
             s.add(job)
             db.log(s, jid, 'reference_queued', {'source_sha': SOURCE_SHA})
+    with db.session() as s:
+        job = s.get(Job, jid)
+        if job.status == "runtime_failed" and (job.error or "").startswith("llm_transport_failed"):
+            job.status, job.error = "queued", None
+            db.log(s, jid, "reference_transport_resume")
     started = time.monotonic()
     last = None
     while time.monotonic() - started < 1200:
@@ -47,6 +53,13 @@ def main():
             if job.status in ('ready_for_review', 'quality_blocked', 'approved'):
                 break
             if job.status == 'runtime_failed':
+                translator = LlamaTranslator(settings)
+                try:
+                    print('REFERENCE_RUNTIME_DIAGNOSTIC=' + json.dumps(translator.validate()), flush=True)
+                except Exception as exc:
+                    print('REFERENCE_RUNTIME_DIAGNOSTIC=' + type(exc).__name__ + ':' + str(exc), flush=True)
+                finally:
+                    translator.close()
                 raise SystemExit('Reference runtime failed: ' + (job.error or 'unknown'))
         time.sleep(5)
     else:

@@ -31,6 +31,7 @@ class LlamaTranslator:
 
     def request(self, path, payload=None):
         for attempt in range(3):
+            response = None
             try:
                 response = self.client.get(path) if payload is None else self.client.post(path, json=payload)
                 if response.status_code in {429, 502, 503, 504}:
@@ -39,7 +40,7 @@ class LlamaTranslator:
                 return response.json()
             except (httpx.TimeoutException, httpx.NetworkError, InferenceError):
                 if attempt == 2:
-                    raise InferenceError("llm_transport_failed") from None
+                    raise InferenceError("llm_transport_failed_" + path.strip("/").replace("-", "_") + "_" + (str(response.status_code) if response is not None else "network")) from None
                 time.sleep((1, 3)[attempt])
             except (httpx.HTTPError, ValueError):
                 raise InferenceError("llm_protocol_failed") from None
