@@ -37,7 +37,7 @@ def main():
             db.log(s, jid, 'reference_queued', {'source_sha': SOURCE_SHA})
     with db.session() as s:
         job = s.get(Job, jid)
-        if job.status == "runtime_failed" and (job.error or "").startswith("llm_transport_failed"):
+        if job.status == "runtime_failed" and ((job.error or "").startswith("llm_transport_failed") or job.error == "IndexError"):
             job.status, job.error = "queued", None
             db.log(s, jid, "reference_transport_resume")
     started = time.monotonic()

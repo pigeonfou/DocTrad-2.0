@@ -15,6 +15,7 @@ def pdf_build(data, ir, translations):
         for p in ir.pages:
             page = doc[p.number]
             page.set_rotation(0)
+            original_links = page.get_links()
             nodes = [n for n in ir.nodes if n.page == p.number and n.translatable and n.id in translations]
             placements = []
             for node in nodes:
@@ -64,6 +65,10 @@ def pdf_build(data, ir, translations):
                         continue
                     placements.append((node, rect, markup, style, rotation))
             if not p.scanned:
+                # Keep navigation out of the redaction pass: MuPDF otherwise deletes intersecting links.
+                if placements:
+                    for link in original_links:
+                        page.delete_link(link)
                 for node, rect, _, _, _ in placements:
                     # Character boxes rather than an expanded paragraph rectangle reduce collateral removals.
                     for run in node.runs:
@@ -82,14 +87,19 @@ def pdf_build(data, ir, translations):
                 else:
                     translated += 1
                     masks.setdefault(p.number, []).append(tuple(rect))
+            if placements and not p.scanned:
+                for link in original_links:
+                    page.insert_link({k: v for k, v in link.items() if k not in {"xref", "id"}})
             if len(page.get_images()) < p.images or len(page.get_drawings()) < p.drawings:
                 report.findings.append(Finding(code="graphics_lost", severity="critical", detail=f"Page {p.number + 1}: ressource graphique perdue"))
             page.set_rotation(p.rotation)
         if doc.get_toc() != ir.navigation.get("toc", []):
             report.findings.append(Finding(code="bookmarks", severity="critical", detail="Signets modifiés"))
-        if [len(p.get_links()) for p in doc] != ir.navigation.get("links", []):
-            report.findings.append(Finding(code="links", severity="critical", detail="Liens perdus ou ajoutés"))
         result = doc.tobytes(garbage=3, deflate=True)
+    # Redactions invalidate MuPDF's in-memory link xref cache. Inspect the serialized result.
+    with fitz.open(stream=result, filetype="pdf") as reopened:
+        if [len(page.get_links()) for page in reopened] != ir.navigation.get("links", []):
+            report.findings.append(Finding(code="links", severity="critical", detail="Liens perdus ou ajoutés"))
     report.metrics = {"pages": len(ir.pages), "composed_units": translated, "native_graphics_preserved": not any(f.code == "graphics_lost" for f in report.findings),
                       "text_masks": masks, "font_policy": "local_html_fallback;max_15pct_reduction"}
     return result, report

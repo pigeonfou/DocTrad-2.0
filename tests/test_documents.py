@@ -118,3 +118,18 @@ def test_large_false_table_does_not_swallow_entire_page():
     ir = extract(doc.tobytes(), "pdf")
     assert all(n.kind != "table_cell" for n in ir.nodes)
     assert len(ir.nodes) == 2
+
+
+def test_link_intersecting_translated_text_survives_redaction():
+    doc = fitz.open()
+    page = doc.new_page(width=600, height=800)
+    page.insert_text((60, 100), "Visit our website", fontsize=12)
+    box = page.search_for("Visit our website")[0]
+    page.insert_link({"kind": fitz.LINK_URI, "from": box, "uri": "https://example.org"})
+    source = doc.tobytes()
+    ir = extract(source, "pdf")
+    result, report = build(source, ir, {ir.nodes[0].id: "Consultez notre site"})
+    assert not any(f.code == "links" for f in report.findings)
+    with fitz.open(stream=result, filetype="pdf") as reopened:
+        assert reopened[0].get_links()[0]["uri"] == "https://example.org"
+        assert "Visit our website" not in reopened[0].get_text()
