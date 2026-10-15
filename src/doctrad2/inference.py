@@ -146,13 +146,16 @@ class LlamaTranslator:
                 target, repairs = restore_unambiguous_units(source, raw)
                 candidates = [{"target": target, "raw_target": raw, "unit_repairs": repairs, "generation": info}]
                 findings = check_text(source, target, '')
-                if any(f.severity == 'critical' for f in findings) or (len(source) < 120 and len(target) > max(30, len(source) * 1.6)):
+                def terminology_misses(candidate):
+                    return sum(' ' in term and term.isupper() and term in source and expected.casefold() not in candidate.casefold()
+                               for term, expected in self.examples)
+                if any(f.severity == 'critical' for f in findings) or terminology_misses(target) or (len(source) < 120 and len(target) > max(30, len(source) * 1.6)):
                     alternate, alternate_info = self.complete(prompt, temperature=.2, seed=43)
                     corrected, repairs = restore_unambiguous_units(source, alternate)
                     candidates.append({"target": corrected, "raw_target": alternate, "unit_repairs": repairs, "generation": alternate_info})
                 def rank(candidate):
                     issues = check_text(source, candidate['target'], '')
-                    return (sum(f.severity == 'critical' for f in issues),
+                    return (sum(f.severity == 'critical' for f in issues), terminology_misses(candidate['target']),
                             sum(f.severity == 'review' for f in issues), len(candidate['target']))
                 if min(rank(c)[0] for c in candidates) > 0:
                     masked, mapping = shield(source)

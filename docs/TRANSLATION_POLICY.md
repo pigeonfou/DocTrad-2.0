@@ -1,4 +1,4 @@
-# Politique générale de traduction — technical-flow-2.3
+# Politique générale de traduction — technical-flow-2.4
 
 Cette politique ne contient aucun identifiant de document, aucune correction lexicale propre à un exemple et aucune traduction de référence appliquée en production.
 
@@ -19,3 +19,5 @@ Une unité peut être restaurée depuis la source uniquement si le multiensemble
 Les angles non orthogonaux sont traités à partir des quadrilatères du texte source, dans un repère aligné, puis réinsérés sous forme vectorielle avec la rotation initiale. Les tests couvrent plusieurs angles dont 45 degrés ; la zone inclinée reste soumise à révision.
 
 Les URL et champs entièrement composés de littéraux techniques sont conservés sans génération. Lors du dernier essai borné, les mesures, séries de dimensions et références sont remplacées par des marqueurs dérivés de la source. Le résultat n’est utilisable que si chaque marqueur est présent exactement une fois, sans marqueur ajouté ; les valeurs source sont alors rétablies. Ce mécanisme protège également les conversions de valeurs non demandées. Les expressions composées par tirets peuvent alimenter les exemples de terminologie, selon la même règle générale que les expressions en capitales.
+
+Une incohérence avec un exemple de terminologie en capitales peut déclencher l’essai alternatif. Les candidats respectant les invariants sont départagés par leur cohérence avec cet exemple. Aucun remplacement lexical imposé n’est effectué dans le texte final.

@@ -191,3 +191,19 @@ def test_failed_numeric_candidates_use_a_bounded_literal_retry(settings):
     assert '5 cm' not in target
     assert len(completions) == 3
     assert provenance['chunks'][0]['selected_attempt'] == 2
+
+
+def test_alternate_prefers_consistency_with_a_source_derived_emphasized_term(settings):
+    count = 0
+    def handler(request):
+        nonlocal count
+        if request.url.path == '/props':
+            return httpx.Response(200, json={'model_path': 'translategemma-12b-it.gguf', 'default_generation_settings': {'n_ctx': 4096}})
+        if request.url.path == '/tokenize':
+            return httpx.Response(200, json={'tokens': [1, 2]})
+        count += 1
+        return httpx.Response(200, json={'content': ['HAUTE TENSION', 'Attention à la tension basse.', 'Attention à la HAUTE TENSION.'][count-1]})
+    translator = LlamaTranslator(settings, httpx.MockTransport(handler))
+    target, provenance = translator.translate('Beware of HIGH VOLTAGE.')
+    assert target == 'Attention à la HAUTE TENSION.'
+    assert provenance['chunks'][0]['selected_attempt'] == 1
