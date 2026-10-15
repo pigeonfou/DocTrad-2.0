@@ -12,7 +12,12 @@ UNITS.update({"Ω": "Ω", "ohm": "Ω", "ohms": "Ω", "mile": "mile", "miles": "m
               "inch": "in", "inches": "in", "pouce": "in", "pouces": "in", "ft": "ft",
               "feet": "ft", "foot": "ft", "pied": "ft", "pieds": "ft", "lbs": "lb", "lb": "lb",
               "pound": "lb", "pounds": "lb", "livre": "lb", "livres": "lb"})
-QUALITY_VERSION = 'physical-quantities-2.5'
+QUALITY_VERSION = 'physical-quantities-2.6'
+UNITS.update({'watt': 'W', 'watts': 'W', 'volt': 'V', 'volts': 'V', 'ampere': 'A', 'amperes': 'A',
+              'ampère': 'A', 'ampères': 'A', 'bar': 'bar', 'bars': 'bar', 'Pa': 'Pa', 'kPa': 'kPa',
+              'MPa': 'MPa', 'mbar': 'mbar', 'psi': 'psi', '°F': '°F', 'K': 'K', 'dBc': 'dBc',
+              'VDC': 'VDC', 'VCC': 'VDC', 'Vcc': 'VDC', 'VAC': 'VAC', 'N': 'N', 'Nm': 'Nm',
+              'J': 'J', 'kJ': 'kJ', 'Wh': 'Wh', 'kWh': 'kWh', 'L': 'L', 'ml': 'ml', 'rpm': 'rpm'})
 UNIT_PATTERN = "|".join(re.escape(x) for x in sorted(UNITS, key=len, reverse=True))
 
 
@@ -67,7 +72,7 @@ def measured_values(text):
     result = []
     text = numeric_text(text)
     # Dimension triplets share their trailing unit, even when axis labels occur.
-    dimension = re.compile(r"((?:\d+(?:[.,]\d+)?\s*(?:[HWD]\s*)?[x×]\s*){1,2}\d+(?:[.,]\d+)?\s*(?:[HWD]\s*)?)\s*(" + UNIT_PATTERN + r")(?![A-Za-z])")
+    dimension = re.compile(r"((?:\d+(?:[.,]\d+)?\s*(?:[A-Za-z]\s*)?[x×]\s*){1,2}\d+(?:[.,]\d+)?\s*(?:[A-Za-z]\s*)?)\s*(?:\(?\s*(?:en|in)\s+)?(" + UNIT_PATTERN + r")(?![A-Za-z])")
     def expand(match):
         return ' '.join(v + ' ' + ('inch' if match[2] == 'in' else match[2]) for v in re.findall(r"\d+(?:[.,]\d+)?", match[1]))
     text = dimension.sub(expand, text)
@@ -78,7 +83,7 @@ def measured_values(text):
             power = '3' if (m['prefix'] or m['word']).startswith('cub') else '2'
         if not power and m['unit'] == 'in' and re.match(r'\s+(?![xX]\b)[A-Za-z]', text[m.end():]):
             continue
-        if m['unit'] in {'W', 'A', 'V'} and re.match(r"\.\s+[A-Z][A-Za-z]+", text[m.end():]) and '\n' in text and len(re.findall(r'\b\d{4,6}\b', text)) >= 2:
+        if m['unit'] in {'W', 'A', 'V'} and re.match(r"\.\s+[A-Z][A-Za-z]+", text[m.end():]) and re.search(r'\b\d{4,6}[.,]?\s*$', text) and len(re.findall(r'\b\d{3,6}\b', text)) >= 2:
             continue
         unit = UNITS[m['unit']] + ('^' + power if power else '')
         result.append((str(Decimal(m['value'].replace('−', '-').replace('–', '-').replace(',', '.')).normalize()), unit))

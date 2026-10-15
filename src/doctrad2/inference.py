@@ -3,7 +3,8 @@ import time
 import httpx
 import ssl
 from .domain import ModelContract
-from .prompts import render, messages, TEMPLATE_SHA
+from .prompts import TEMPLATE_SHA
+from .technical_prompt import render_technical, PROMPT_SHA
 from .text_policy import translation_source, sentence_parts, POLICY_VERSION
 from .quality import check_text
 from .fidelity import restore_unambiguous_units
@@ -27,8 +28,6 @@ class LlamaTranslator:
         self.client = httpx.Client(verify=tls,base_url=settings.llm_url.rstrip("/"), timeout=90,
                                    headers={"Authorization": f"Bearer {settings.llm_key}"} if settings.llm_key else {},
                                    trust_env=False, follow_redirects=False, transport=transport)
-        self.examples = []
-        self.term_cache = {}
         self._validated = False
         self._local_template = False
 
@@ -64,16 +63,10 @@ class LlamaTranslator:
         if not model or "translategemma-12b" not in model.lower():
             raise InferenceError("wrong_loaded_model")
         self._validated = True
-        return {"model": model, "context": ctx, "template": "local-translategemma" if self._local_template else "embedded-translategemma", "template_sha": TEMPLATE_SHA}
+        return {"model": model, "context": ctx, "template": "technical-direct", "prompt_sha": PROMPT_SHA, "template_sha": TEMPLATE_SHA}
 
     def prompt(self, text):
-        if self._local_template:
-            return render(text, self.examples)
-        result = self.request("/apply-template", {"messages": messages(text, self.examples), "add_generation_prompt": True})
-        prompt = result.get("prompt")
-        if not isinstance(prompt, str):
-            raise InferenceError("template_endpoint_required")
-        return prompt
+        return render_technical(text)
 
     def token_count(self, prompt):
         result = self.request("/tokenize", {"content": prompt, "add_special": False, "parse_special": True})
@@ -113,28 +106,9 @@ class LlamaTranslator:
         if not self._validated:
             self.validate()
         source_text = translation_source(text)
-        self.examples = []
-        # Short emphasized phrases are translated independently, then supplied as
-        # normal user/assistant examples using the official conversation schema.
-        # These terms are derived from this source, never a document wordlist.
         if literal_only(source_text):
-            return text, {'contract': self.contract.model_dump(), 'translation_policy': POLICY_VERSION, 'literal_only': True, 'chunks': []}
-        terms = re.findall(r"\b[A-Z]{2,}(?:[ -]+[A-Z]{2,}){1,3}\b", source_text)
-        terms += re.findall(r'\b[A-Za-z]+(?:-[A-Za-z]+)+\b', source_text)
-        for term in dict.fromkeys(terms):
-            if term == source_text or len(term) > 60 or len(self.examples) >= 3:
-                continue
-            if term not in self.term_cache:
-                prior = self.examples
-                self.examples = []
-                try:
-                    translated_term, _ = self.complete(self.prompt(term))
-                finally:
-                    self.examples = prior
-                if not any(f.severity == 'critical' for f in check_text(term, translated_term, '')):
-                    self.term_cache[term] = translated_term
-            if term in self.term_cache:
-                self.examples.append((term, self.term_cache[term]))
+            return text, {"contract": self.contract.model_dump(), "translation_policy": POLICY_VERSION,
+                          "prompt_sha": PROMPT_SHA, "literal_only": True, "chunks": []}
         bullet = re.match(r"^([>•›])\s+(?=[A-Za-z])", source_text)
         prefix = bullet.group() if bullet else ''
         if prefix:
@@ -148,16 +122,13 @@ class LlamaTranslator:
                 rejected = []
                 candidates = [{"target": target, "raw_target": raw, "unit_repairs": repairs, "generation": info}]
                 findings = check_text(source, target, '')
-                def terminology_misses(candidate):
-                    return sum(' ' in term and term.isupper() and term in source and expected.casefold() not in candidate.casefold()
-                               for term, expected in self.examples)
-                if any(f.severity == 'critical' for f in findings) or terminology_misses(target) or (len(source) < 120 and len(target) > max(30, len(source) * 1.6)):
+                if any(f.severity == 'critical' for f in findings) or (len(source) < 120 and len(target) > max(30, len(source) * 1.6)):
                     alternate, alternate_info = self.complete(prompt, temperature=.2, seed=43)
                     corrected, repairs = restore_unambiguous_units(source, alternate)
                     candidates.append({"target": corrected, "raw_target": alternate, "unit_repairs": repairs, "generation": alternate_info})
                 def rank(candidate):
                     issues = check_text(source, candidate['target'], '')
-                    return (sum(f.severity == 'critical' for f in issues), terminology_misses(candidate['target']),
+                    return (sum(f.severity == 'critical' for f in issues),
                             sum(f.severity == 'review' for f in issues), len(candidate['target']))
                 if min(rank(c)[0] for c in candidates) > 0:
                     masked, mapping = shield(source)
@@ -181,6 +152,6 @@ class LlamaTranslator:
                                        {**candidate['generation'], "raw_target": candidate['raw_target'], "target": candidate['target'], "unit_repairs": candidate['unit_repairs'], "findings": [f.code for f in check_text(source, candidate['target'], '')]}
                                        for candidate in candidates]})
         return prefix + " ".join(outputs), {"contract": self.contract.model_dump(), "chunks": provenance,
-                                      "context_policy": "official_template_complete_sentences;context_for_review",
-                                      "translation_policy": POLICY_VERSION, "terminology_examples": self.examples,
-                                      "template_sha": TEMPLATE_SHA, "template_mode": "local" if self._local_template else "embedded"}
+                                      "context_policy": "technical_direct_complete_sentences;context_for_review",
+                                      "translation_policy": POLICY_VERSION,
+                                      "template_sha": TEMPLATE_SHA, "prompt_sha": PROMPT_SHA, "template_mode": "technical-direct"}

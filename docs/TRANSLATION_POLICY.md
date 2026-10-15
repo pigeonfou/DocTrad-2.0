@@ -1,23 +1,35 @@
-# Politique générale de traduction — technical-flow-2.4
+# Politique générale — technical-flow-3.0
 
-Cette politique ne contient aucun identifiant de document, aucune correction lexicale propre à un exemple et aucune traduction de référence appliquée en production.
+Cette politique ne contient aucun nom de document, identifiant de produit ou remplacement lexical propre à une référence. Les textes et empreintes des documents d’essai sont confinés aux benchmarks.
 
-Le texte est préparé en supprimant les retours à la ligne de mise en page, tout en conservant les tirets, caractères et nombres. Les phrases complètes sont traduites avec le template TranslateGemma officiel, sans injecter de consignes dans le texte source. Les puces typographiques sont séparées du contenu puis rétablies.
+## Traduction
 
-Une seconde génération, bornée à un essai supplémentaire sans protection, puis un dernier essai avec marqueurs si les invariants restent violés, est effectuée si un candidat échoue aux contrôles critiques ou développe excessivement un fragment court. Le choix porte d’abord sur les invariants, puis les alertes de revue et la longueur. Les essais et le choix sont enregistrés dans la provenance. Ce mécanisme n’est pas une garantie de fidélité sémantique et ne remplace pas une révision.
+Les retours à la ligne de mise en page sont normalisés sans supprimer les tirets. Les phrases complètes sont traduites séparément. Les puces sont séparées du contenu puis rétablies.
 
-Les contrôles distinguent les plages de mesure, les signes, les composantes des versions, les descriptions numériques traduisibles et les références techniques. Les unités partagées d’une série de dimensions sont prises en compte. Une écriture étrangère nouvelle est bloquante. Les expressions en capitales traduites à l’intérieur de la prose sont signalées à la révision, sans dictionnaire thématique.
+Le profil technique direct utilise une consigne identique pour tous les fichiers : français concis, fidélité du sens, du degré des qualificatifs, des quantités, unités, négations et libellés formels ; aucune conversion, expansion d’acronyme ou explication ajoutée. Il est rendu côté client et envoyé à `/completion` avec les tokens réels. Son empreinte est inscrite dans le contrat. Ce profil manuel a été comparé au template initial et à une variante de celui-ci sur six contrôles publics indépendants. Il ne constitue pas une garantie de fidélité sémantique.
 
-La composition utilise les styles dominants pondérés par le texte. Les puces gardent leur couleur ; un exposant ne réduit pas la taille de tout un paragraphe. Les colonnes restent séparées par une marge physique et les extensions sont bornées par les textes, images et éléments vectoriels. Les cellules artificiellement divisées ne peuvent être plus étroites que le texte source qu’elles contiennent. Les lignes de base sont conservées lorsque la géométrie le permet. Un texte qui ne tient pas reste signalé, sans suppression de la source.
+Les exemples terminologiques produits par le modèle ne sont pas réinjectés : les essais ont montré qu’ils pouvaient renforcer une mauvaise traduction. Aucun dictionnaire thématique de remplacement n’est appliqué.
 
-La version de politique figure dans le contrat et la clé de référence. Une nouvelle politique produit de nouveaux traitements et ne mélange pas silencieusement les anciens candidats avec les nouveaux. Les essais de déploiement utilisent deux PDF distincts : une fiche existante et un guide d’équipement synthétique. Les chemins et empreintes propres à ces essais restent confinés aux scripts de benchmark, jamais au moteur de traduction.
+## Reprises et littéraux
 
-Les expressions courtes en capitales à l’intérieur de la prose sont traduites isolément puis proposées comme exemples bilingues dans le schéma de conversation officiel. Les exemples proviennent uniquement de la source en cours et sont conservés dans la provenance. Ils ne constituent pas un lexique imposé à tous les documents.
+Un essai alternatif borné traite les candidats qui violent les invariants ou développent excessivement un fragment court. Un dernier essai peut isoler les mesures, dimensions et références avec des marqueurs dérivés de la source. Chaque marqueur doit revenir exactement une fois ; sinon le résultat est rejeté. Le budget réel de tokens est contrôlé avant cet essai. Les URL et champs entièrement constitués de littéraux restent intacts.
 
-Une unité peut être restaurée depuis la source uniquement si le multiensemble des nombres est inchangé, si chaque valeur concernée désigne une seule unité source et si le résultat retrouve toutes les mesures source. Les conversions et cas ambigus ne sont jamais corrigés par supposition. Les candidats bruts et restaurations sont tracés ; une alerte de révision les signale.
+Une restauration d’unité n’est permise que si les nombres sont inchangés et que la valeur concernée possède une seule unité source. Le résultat doit retrouver toutes les mesures source. Les conversions et ambiguïtés ne sont jamais réparées par supposition. Les candidats bruts, choix, rejets et restaurations sont tracés.
 
-Les angles non orthogonaux sont traités à partir des quadrilatères du texte source, dans un repère aligné, puis réinsérés sous forme vectorielle avec la rotation initiale. Les tests couvrent plusieurs angles dont 45 degrés ; la zone inclinée reste soumise à révision.
+## Contrôles
 
-Les URL et champs entièrement composés de littéraux techniques sont conservés sans génération. Lors du dernier essai borné, les mesures, séries de dimensions et références sont remplacées par des marqueurs dérivés de la source. Le résultat n’est utilisable que si chaque marqueur est présent exactement une fois, sans marqueur ajouté ; les valeurs source sont alors rétablies. Ce mécanisme protège également les conversions de valeurs non demandées. Les expressions composées par tirets peuvent alimenter les exemples de terminologie, selon la même règle générale que les expressions en capitales.
+Les contrôles distinguent les intervalles, signes, versions, descriptions numériques, références, puissances d’unités et unités partagées des dimensions. Ils prennent en compte les annotations d’axes. Une écriture étrangère ajoutée est critique. Les expressions en capitales traduites restent soumises à révision, sans lexique imposé. Les contrôles numériques ne certifient pas le sens d’un texte.
 
-Une incohérence avec un exemple de terminologie en capitales peut déclencher l’essai alternatif. Les candidats respectant les invariants sont départagés par leur cohérence avec cet exemple. Aucun remplacement lexical imposé n’est effectué dans le texte final.
+Les erreurs de transport temporaires disposent d’une reprise bornée laissant le temps au service BC250 de redémarrer. Les erreurs d’authentification ou de protocole ne sont pas assimilées à ces indisponibilités. Les unités déjà enregistrées sont conservées.
+
+## Composition
+
+Le style dominant est pondéré par le texte : une puce ne colore pas le paragraphe et un exposant ne réduit pas tout le bloc. Les colonnes gardent une marge, les extensions sont bornées par les textes, images et séparateurs. Une cellule artificielle ne peut être plus étroite que la ligne source qu’elle contient. Les lignes de base sont conservées lorsque la géométrie le permet. Les textes inclinés sont recomposés vectoriellement dans leur repère propre.
+
+Si le texte ne tient pas, la source est conservée et une erreur critique est produite. Un candidat ne devient pas correct parce que la composition réussit. Les liens sont préservés et vérifiés après réouverture du PDF.
+
+## Versions et essais
+
+La politique et l’empreinte de prompt font partie du contrat et des clés de référence. Les versions de composition et de qualité figurent dans le rapport. Une recomposition peut réévaluer les candidats conservés sans nouvelle inférence lorsque leur contrat de traduction est identique.
+
+Les tests couvrent des cas variés indépendants. Les essais de déploiement utilisent une fiche existante et un guide d’équipement synthétique distinct, tous deux traités par le vrai worker et la BC250. Un résultat `quality_blocked` n’est jamais déclaré approuvé.

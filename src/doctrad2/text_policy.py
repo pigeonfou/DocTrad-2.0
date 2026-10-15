@@ -1,7 +1,7 @@
 """Document-independent preprocessing. No document identifiers, vocabulary or replacements."""
 import re
 
-POLICY_VERSION = 'technical-flow-2.4'
+POLICY_VERSION = 'technical-flow-3.0'
 
 
 def translation_source(text):

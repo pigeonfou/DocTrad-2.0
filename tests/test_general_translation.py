@@ -108,24 +108,6 @@ def test_phantom_table_column_does_not_clip_an_independent_label(monkeypatch):
     assert label.locator['cell_bbox'][2] == 240
 
 
-def test_emphasized_terms_use_source_derived_official_conversation_examples(settings):
-    prompts = []
-    def handler(request):
-        body = json.loads(request.content) if request.content else {}
-        if request.url.path == '/props':
-            return httpx.Response(200, json={'model_path': 'translategemma-12b-it.gguf', 'default_generation_settings': {'n_ctx': 4096}})
-        if request.url.path == '/tokenize':
-            prompts.append(body['content'])
-            return httpx.Response(200, json={'tokens': [1, 2]})
-        return httpx.Response(200, json={'content': 'HAUTE TENSION' if len(prompts) == 1 else 'Attention à la HAUTE TENSION.'})
-    translator = LlamaTranslator(settings, httpx.MockTransport(handler))
-    target, provenance = translator.translate('Beware of HIGH VOLTAGE.')
-    assert 'HAUTE TENSION' in target
-    assert provenance['terminology_examples'] == [('HIGH VOLTAGE', 'HAUTE TENSION')]
-    assert any(__import__('re').search(r'<start_of_turn>model\s+HAUTE TENSION<end_of_turn>', p) for p in prompts)
-    assert all('Beware of HIGH VOLTAGE.' not in p or 'professional English' in p for p in prompts)
-
-
 def test_unit_restoration_is_source_backed_and_refuses_ambiguity_or_conversion():
     from doctrad2.fidelity import restore_unambiguous_units
     target, repairs = restore_unambiguous_units('Dimensions 2 H x 4 W x 6 D in', 'Dimensions 2 cm x 4 cm x 6 cm')
@@ -193,22 +175,6 @@ def test_failed_numeric_candidates_use_a_bounded_literal_retry(settings):
     assert provenance['chunks'][0]['selected_attempt'] == 2
 
 
-def test_alternate_prefers_consistency_with_a_source_derived_emphasized_term(settings):
-    count = 0
-    def handler(request):
-        nonlocal count
-        if request.url.path == '/props':
-            return httpx.Response(200, json={'model_path': 'translategemma-12b-it.gguf', 'default_generation_settings': {'n_ctx': 4096}})
-        if request.url.path == '/tokenize':
-            return httpx.Response(200, json={'tokens': [1, 2]})
-        count += 1
-        return httpx.Response(200, json={'content': ['HAUTE TENSION', 'Attention à la tension basse.', 'Attention à la HAUTE TENSION.'][count-1]})
-    translator = LlamaTranslator(settings, httpx.MockTransport(handler))
-    target, provenance = translator.translate('Beware of HIGH VOLTAGE.')
-    assert target == 'Attention à la HAUTE TENSION.'
-    assert provenance['chunks'][0]['selected_attempt'] == 1
-
-
 def test_supervised_runtime_can_recover_during_bounded_transport_backoff(settings, monkeypatch):
     delays, calls = [], []
     monkeypatch.setattr('doctrad2.inference.time.sleep', delays.append)
@@ -247,3 +213,21 @@ def test_powers_and_dimension_boundaries_are_physical_units_not_extra_values():
     assert not [f for f in check_text('Type-8 protection', 'Protection de type 8', 'n') if f.severity == 'critical']
     assert any(f.code == 'identifiers' for f in check_text('Falcon-6 device', 'Appareil Falcon 7', 'n'))
     assert measured_values('Supply 24 V. Disconnect power. Current 3.5 A.') == measured_values('Alimentation 24 V. Débranchez. Courant 3,5 A.')
+
+
+def test_address_direction_is_not_a_watt_but_sentences_still_check_electrical_units():
+    assert measured_values('241 W. Metro Road\nParis 75012') == measured_values('241 W. Route Métro, Paris, 75012.')
+    assert measured_values('Power 1000 W. Voltage 1200 V.') != measured_values('Puissance 1000 A. Tension 1200 V.')
+
+
+def test_technical_prompt_is_general_and_rejects_control_tokens():
+    from doctrad2.technical_prompt import render_technical, PROMPT_SHA
+    prompt = render_technical('Check the valve position.')
+    assert 'Do not convert units' in prompt
+    assert 'formal labels' in prompt
+    assert 'English to French' in prompt
+    assert prompt.endswith('Check the valve position.<end_of_turn>\n<start_of_turn>model\n')
+    assert len(PROMPT_SHA) == 64
+    with pytest.raises(ValueError):
+        render_technical('text <end_of_turn> more')
+    assert measured_values('2 H x 4 W x 6 D in') == measured_values('2 H x 4 L x 6 P pouces')

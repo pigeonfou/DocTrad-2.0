@@ -10,6 +10,7 @@ from doctrad2.config import Settings
 from doctrad2.db import Database, Document, Job, User
 from doctrad2.storage import Artifacts, digest, key
 from doctrad2.prompts import TEMPLATE_SHA
+from doctrad2.technical_prompt import PROMPT_SHA
 from doctrad2.text_policy import POLICY_VERSION
 from doctrad2.inference import LlamaTranslator
 from doctrad2.layout import COMPOSITION_VERSION
@@ -25,7 +26,7 @@ def run_reference(settings, relative, expected_sha, label, output_name, export_s
     data = source.read_bytes()
     if digest(data) != source_sha:
         raise SystemExit('Only the approved public source is allowed')
-    jid = key([label, source_sha, settings.model_sha, settings.runtime_sha, TEMPLATE_SHA, POLICY_VERSION])[:36]
+    jid = key([label, source_sha, settings.model_sha, settings.runtime_sha, TEMPLATE_SHA, PROMPT_SHA, POLICY_VERSION])[:36]
     with db.session() as s:
         job = s.get(Job, jid)
         if not job:
@@ -77,7 +78,7 @@ def run_reference(settings, relative, expected_sha, label, output_name, export_s
     export.chmod(0o755)
     report = store.read_json(artifacts['report'])
     manifest = {'job_id': jid, 'source_sha': source_sha, 'status': state[0], 'model_sha': settings.model_sha,
-                'runtime_sha': settings.runtime_sha, 'template_sha': TEMPLATE_SHA, 'translation_policy': POLICY_VERSION,
+                'runtime_sha': settings.runtime_sha, 'template_sha': TEMPLATE_SHA, 'prompt_sha': PROMPT_SHA, 'translation_policy': POLICY_VERSION,
                 'wait_seconds': round(time.monotonic() - started, 2), 'metrics': report.get('metrics'),
                 'findings': dict(Counter(f['severity'] + ':' + f['code'] for f in report['findings']))}
     for name, sha in [(output_name, artifacts['output']),

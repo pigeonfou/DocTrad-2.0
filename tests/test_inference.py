@@ -75,7 +75,7 @@ def test_content_only_gguf_uses_pinned_local_template(settings):
         if request.url.path == '/tokenize':
             assert body['add_special'] is False
             assert body['content'].startswith('<bos><start_of_turn>user\n')
-            assert 'English (en) to French (fr)' in body['content']
+            assert 'English to French' in body['content']
             assert body['content'].endswith('Input 12 V<end_of_turn>\n<start_of_turn>model\n')
             return httpx.Response(200, json={'tokens': [2, 105, 17]})
         assert request.url.path == '/completion'
@@ -85,7 +85,7 @@ def test_content_only_gguf_uses_pinned_local_template(settings):
     translator = LlamaTranslator(settings, transport(handler))
     target, provenance = translator.translate('Input 12 V')
     assert target == 'Entrée 12 V'
-    assert provenance['template_mode'] == 'local'
+    assert provenance['template_mode'] == 'technical-direct'
     assert len(provenance['template_sha']) == 64
 
 

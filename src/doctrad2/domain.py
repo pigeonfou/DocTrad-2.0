@@ -1,6 +1,6 @@
 from typing import Literal
 from pydantic import BaseModel, Field
-from .prompts import TEMPLATE_SHA
+from .technical_prompt import PROMPT_SHA
 from .text_policy import POLICY_VERSION
 
 
@@ -62,7 +62,7 @@ class ModelContract(BaseModel):
     name: str = "translategemma-12b-it.Q4_K_M.gguf"
     model_sha: str
     runtime_sha: str
-    template: str = "translategemma-text-template-v2:" + TEMPLATE_SHA
+    template: str = "technical-direct-v1:" + PROMPT_SHA
     quantization: str = "Q4_K_M"
     input_tokens: int = 1800
     output_tokens: int = 1200
