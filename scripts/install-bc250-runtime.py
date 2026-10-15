@@ -43,6 +43,7 @@ def ensure_available(proc=Path('/proc')):
         except (OSError, IndexError):
             continue
     with socket.socket() as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         probe.bind(('127.0.0.1', PORT))
 
 
@@ -58,7 +59,7 @@ User=bc
 WorkingDirectory=/home/bc
 Environment=HOME=/home/bc
 ExecStartPre=/usr/bin/python3 {INSTALLED} --check
-ExecStart={BINARY} --model {MODEL} --host 127.0.0.1 --port {PORT} --device Vulkan0 --n-gpu-layers 99 --ctx-size 4096 --parallel 1 --batch-size 512 --ubatch-size 128 --cache-type-k f16 --cache-type-v f16 --jinja
+ExecStart={BINARY} --model {MODEL} --host 127.0.0.1 --port {PORT} --device Vulkan0 --n-gpu-layers 99 --ctx-size 4096 --parallel 1 --batch-size 512 --ubatch-size 128 --cache-type-k f16 --cache-type-v f16 --no-jinja --chat-template chatml
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=180
@@ -82,13 +83,18 @@ def main():
     if os.geteuid() != 0:
         raise SystemExit('Run the installer with sudo')
     target = Path('/etc/systemd/system') / SERVICE
-    if target.exists() and target.read_text() != unit():
+    previous = target.read_text() if target.exists() else None
+    legacy = unit().replace('--no-jinja --chat-template chatml', '--jinja')
+    if previous is not None and previous not in (unit(), legacy):
         raise SystemExit('Existing service differs; refusing to overwrite it')
     active = subprocess.run(['systemctl', 'is-active', '--quiet', SERVICE]).returncode == 0
+    if active and previous != unit():
+        subprocess.run(['systemctl', 'stop', SERVICE], check=True)
+        active = False
     if not active:
         ensure_available()
     help_text = subprocess.check_output([str(BINARY), '--help'], stderr=subprocess.STDOUT, text=True)
-    for flag in ('--device', '--n-gpu-layers', '--parallel', '--ctx-size', '--cache-type-k', '--cache-type-v', '--jinja'):
+    for flag in ('--device', '--n-gpu-layers', '--parallel', '--ctx-size', '--cache-type-k', '--cache-type-v', '--no-jinja', '--chat-template'):
         if flag not in help_text:
             raise SystemExit('Enrolled runtime lacks ' + flag)
     INSTALLED.parent.mkdir(parents=True, exist_ok=True)
@@ -97,9 +103,13 @@ def main():
     target.write_text(unit())
     target.chmod(0o644)
     subprocess.run(['systemctl', 'daemon-reload'], check=True)
+    subprocess.run(['systemctl', 'reset-failed', SERVICE], check=True)
     subprocess.run(['systemctl', 'enable', '--now', SERVICE], check=True)
+    print('Service démarré ; attente du chargement du modèle (maximum environ 3 minutes).', flush=True)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    for _ in range(90):
+    for attempt in range(90):
+        if attempt and attempt % 5 == 0:
+            print(f'Chargement en cours : environ {attempt * 2} secondes écoulées.', flush=True)
         try:
             with opener.open(f'http://127.0.0.1:{PORT}/props', timeout=2) as response:
                 props = json.load(response)

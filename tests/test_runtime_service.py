@@ -23,3 +23,18 @@ def test_service_uses_enrolled_runtime_and_single_gpu_slot():
     assert 'Restart=on-failure' in text
     assert 'ExecStartPre=/usr/bin/python3' in text
     assert 'User=bc' in text
+    assert '--no-jinja --chat-template chatml' in text
+    assert ' --jinja' not in text
+
+
+def test_port_probe_allows_tcp_time_wait(monkeypatch, tmp_path):
+    calls = []
+    class Socket:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def setsockopt(self, *args): calls.append(('reuse', args))
+        def bind(self, address): calls.append(('bind', address))
+    monkeypatch.setattr(runtime.socket, 'socket', Socket)
+    runtime.ensure_available(tmp_path)
+    assert calls[0] == ('reuse', (runtime.socket.SOL_SOCKET, runtime.socket.SO_REUSEADDR, 1))
+    assert calls[1] == ('bind', ('127.0.0.1', 52365))
