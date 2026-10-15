@@ -92,10 +92,15 @@ class Pipeline:
         with self.db.session() as s:
             job = self.owned(s, jid, token, lost)
             contract = ModelContract(model_sha=self.settings.model_sha, runtime_sha=self.settings.runtime_sha).model_dump()
-            if job.contract and job.contract != contract:
-                # Never combine machine candidates from different contracts in a resumed revision.
-                raise RuntimeError("model_contract_changed_create_new_job")
-            job.contract = contract
+            targets = dict(s.execute(select(Unit.node_id, Unit.target).where(Unit.job_id == jid)).all())
+            pending = any(n.translatable and targets.get(n.id) is None for n in ir.nodes)
+            if pending:
+                if job.contract and job.contract != contract:
+                    # Never combine machine candidates from different contracts in a resumed revision.
+                    raise RuntimeError("model_contract_changed_create_new_job")
+                job.contract = contract
+            # A completed candidate set can be recomposed after an upgrade without
+            # calling the model or changing its original generation contract.
         translator = None
         try:
             for index, node in enumerate(ir.nodes):

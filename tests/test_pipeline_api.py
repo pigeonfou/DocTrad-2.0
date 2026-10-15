@@ -2,7 +2,7 @@ import time
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
 from doctrad2.api import create_app
-from doctrad2.db import User, Document, Job
+from doctrad2.db import User, Document, Job, Unit
 from doctrad2.storage import Artifacts
 from doctrad2.pipeline import Pipeline
 from conftest import pdf
@@ -148,3 +148,55 @@ def test_unconfigured_bc250_blocks_translation_start(settings, database):
     doc = client.post('/v2/documents', files={'file': ('x.pdf', pdf())}, headers=headers).json()
     result = client.post(f"/v2/documents/{doc['id']}/jobs", json={}, headers=headers)
     assert result.status_code == 503
+
+
+def test_recomposition_of_completed_older_contract_keeps_provenance_and_avoids_inference(settings, database):
+    store = Artifacts(settings.root)
+    with database.session() as s:
+        document = Document(owner="alice", name="independent.pdf", source_sha=store.put(pdf()), format="pdf")
+        s.add(document)
+        s.flush()
+        job = Job(owner="alice", document_id=document.id)
+        s.add(job)
+        s.flush()
+        jid = job.id
+    assert Pipeline(settings, database, FakeTranslator).work(once=True)
+    with database.session() as s:
+        job = s.get(Job, jid)
+        contract = dict(job.contract)
+        contract["translation_policy"] = "archived-policy"
+        job.contract = contract
+        job.status = "queued"
+    def no_inference(settings):
+        raise AssertionError("recomposition must not instantiate a translator")
+    assert Pipeline(settings, database, no_inference).work(once=True)
+    with database.session() as s:
+        job = s.get(Job, jid)
+        assert job.status == "ready_for_review"
+        assert job.contract["translation_policy"] == "archived-policy"
+
+
+def test_incomplete_older_contract_still_cannot_mix_machine_policies(settings, database):
+    store = Artifacts(settings.root)
+    with database.session() as s:
+        document = Document(owner="alice", name="independent.pdf", source_sha=store.put(pdf()), format="pdf")
+        s.add(document)
+        s.flush()
+        job = Job(owner="alice", document_id=document.id)
+        s.add(job)
+        s.flush()
+        jid = job.id
+    assert Pipeline(settings, database, FakeTranslator).work(once=True)
+    with database.session() as s:
+        job = s.get(Job, jid)
+        unit = s.query(Unit).filter_by(job_id=jid).first()
+        unit.target = None
+        contract = dict(job.contract)
+        contract["translation_policy"] = "archived-policy"
+        job.contract = contract
+        job.status = "queued"
+    assert Pipeline(settings, database, FakeTranslator).work(once=True)
+    with database.session() as s:
+        job = s.get(Job, jid)
+        assert job.status == "runtime_failed"
+        assert job.error == "model_contract_changed_create_new_job"

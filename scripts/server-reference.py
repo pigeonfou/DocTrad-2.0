@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Queue a fixed public reference through the real worker and export only its public outputs."""
 from collections import Counter
+import base64
 import json
+import pymupdf as fitz
 import os
 from pathlib import Path
 import time
@@ -89,6 +91,17 @@ def run_reference(settings, relative, expected_sha, label, output_name, export_s
     (export / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
     (export / 'manifest.json').chmod(0o644)
     print('PUBLIC_REFERENCE_RESULT=' + json.dumps(manifest, ensure_ascii=False), flush=True)
+    # These previews are restricted to the fixed, hash-checked public benchmarks.
+    # Chunking keeps log lines bounded; no arbitrary uploaded document is exported.
+    with fitz.open(stream=store.get(artifacts['output']), filetype='pdf') as document:
+        for page in document:
+            matrix = fitz.Matrix(1400 / max(page.rect.width, page.rect.height), 1400 / max(page.rect.width, page.rect.height))
+            encoded = base64.b64encode(page.get_pixmap(matrix=matrix, alpha=False).tobytes('jpeg', jpg_quality=88)).decode()
+            chunks = [encoded[i:i+2048] for i in range(0, len(encoded), 2048)]
+            print('PUBLIC_PREVIEW_BEGIN=' + json.dumps({'job': jid, 'page': page.number, 'file': output_name}), flush=True)
+            for index, chunk in enumerate(chunks):
+                print(f'PUBLIC_PREVIEW_CHUNK={jid}:{page.number}:{index}:{len(chunks)}:{chunk}', flush=True)
+
 
 
 def main():
