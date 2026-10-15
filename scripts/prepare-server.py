@@ -52,20 +52,44 @@ def main():
 
 
 def initialize_users(python):
-    old = envfile(Path('/etc/docutranslate/docutranslate.env'))
     credentials = []
-    old_python = Path('/opt/docutranslate/current/.venv/bin/python')
-    if old_python.is_file():
-        environment = os.environ.copy()
-        environment.update(old)
-        environment['DATABASE_URL'] = old.get('DATABASE_URL', 'postgresql+psycopg://docutranslate@localhost/docutranslate')
+    candidates = [('/opt/oneforall/apps/doctrad/current/.venv/bin/python', 'ofa-doctrad', '/etc/oneforall/apps/doctrad.json'),
+                  ('/opt/docutranslate/current/.venv/bin/python', 'docutranslate', '/etc/docutranslate/docutranslate.env')]
+    for executable, account, config_path in candidates:
+        config = Path(config_path)
+        if not Path(executable).is_file() or not config.is_file():
+            continue
+        old = json.loads(config.read_text()) if config.suffix == '.json' else envfile(config)
+        if not old.get('DATABASE_URL'):
+            continue
+        environment = dict(os.environ, **old)
         script = "import os,json; from sqlalchemy import create_engine,text; e=create_engine(os.environ['DATABASE_URL']);\nwith e.connect() as c: print(json.dumps([dict(r._mapping) for r in c.execute(text('SELECT username,password FROM users'))]))"
         try:
-            credentials = json.loads(command(['runuser', '-u', 'docutranslate', '--preserve-environment', '--', str(old_python), '-c', script], env=environment))
+            credentials = json.loads(command(['runuser', '-u', account, '--preserve-environment', '--', executable, '-c', script], env=environment))
+            if credentials:
+                break
         except (subprocess.CalledProcessError, ValueError):
-            print('V1 accounts not readable; a separate local admin will be generated')
+            continue
     # Hashes travel only through the local child process stdin, never workflow output or argv.
-    program = "import sys,json; from doctrad2.config import Settings; from doctrad2.db import Database,User; db=Database(Settings.load().database_url);\nwith db.session() as s:\n for u in json.load(sys.stdin):\n  if not s.get(User,u['username']): s.add(User(name=u['username'],password=u['password']))"
+    initial = Path('/etc/doctrad2/initial-admin')
+    initial_password = initial.read_text().splitlines()[1] if initial.exists() else None
+    program = """import sys,json
+from argon2 import PasswordHasher
+from argon2.exceptions import VerificationError
+from doctrad2.config import Settings
+from doctrad2.db import Database,User
+payload=json.load(sys.stdin)
+db=Database(Settings.load().database_url)
+with db.session() as s:
+ for item in payload['users']:
+  user=s.get(User,item['username'])
+  if not user:
+   s.add(User(name=item['username'],password=item['password']))
+  elif user.name=='admin' and payload['initial']:
+   try:
+    if PasswordHasher().verify(user.password,payload['initial']): user.password=item['password']
+   except VerificationError: pass
+"""
     if not credentials:
         from argon2 import PasswordHasher
         password = secrets.token_urlsafe(24)
@@ -75,7 +99,7 @@ def initialize_users(python):
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, 'w') as out:
                 out.write('admin\n' + password + '\n')
-    command(['runuser', '-u', 'doctrad2', '--preserve-environment', '--', python, '-c', program], input=json.dumps(credentials))
+    command(['runuser', '-u', 'doctrad2', '--preserve-environment', '--', python, '-c', program], input=json.dumps({"users": credentials, "initial": initial_password}))
     print(f'V2 accounts initialized: {len(credentials)}; no passwords or hashes logged')
 
 

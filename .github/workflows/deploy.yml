@@ -34,3 +34,11 @@ jobs:
         run: |
           curl -fsS http://127.0.0.1:8097/health
           systemctl is-active doctrad2-web
+      - name: Collect public reference artifacts
+        if: always() && steps.current.outputs.current == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: doctrad2-public-reference
+          path: /var/lib/doctrad2-reference/
+          if-no-files-found: ignore
+          retention-days: 14

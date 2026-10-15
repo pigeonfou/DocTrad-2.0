@@ -71,3 +71,7 @@ fi
 printf '%s\n' "$PREVIOUS" > /opt/doctrad2/previous
 printf '%s\n' "$SHA" > "$RELEASE/VALIDATED"
 echo "Installed tested release $SHA (quality acceptance is separate)"
+
+python3 "$RELEASE/scripts/integrate-oneforall.py"
+install -d -m 0755 -o doctrad2 -g doctrad2 /var/lib/doctrad2-reference
+runuser -u doctrad2 --preserve-environment -- "$RELEASE/.venv/bin/python" "$RELEASE/scripts/server-reference.py"
