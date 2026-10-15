@@ -5,6 +5,8 @@ import re
 import pymupdf as fitz
 from .text_policy import translation_source
 
+COMPOSITION_VERSION = "bounded-style-2.5"
+
 
 def source_style(node):
     runs = [r for r in node.runs if r.text.strip()]
@@ -54,7 +56,7 @@ def placement_box(node, page, nodes):
     original = fitz.Rect(node.bbox)
     if node.kind == 'table_cell' and 'cell_bbox' in node.locator:
         cell = fitz.Rect(node.locator['cell_bbox'])
-        return cell + (1, 1, -1, -1)
+        return cell + (.5, .5, -.5, -.5)
     if node.locator.get('text_rotation', 0) or abs(node.locator.get('text_angle', 0)) > 1:
         return original
     size, _, _ = source_style(node)

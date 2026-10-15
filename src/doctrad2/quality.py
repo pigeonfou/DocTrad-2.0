@@ -12,10 +12,11 @@ UNITS.update({"Ω": "Ω", "ohm": "Ω", "ohms": "Ω", "mile": "mile", "miles": "m
               "inch": "in", "inches": "in", "pouce": "in", "pouces": "in", "ft": "ft",
               "feet": "ft", "foot": "ft", "pied": "ft", "pieds": "ft", "lbs": "lb", "lb": "lb",
               "pound": "lb", "pounds": "lb", "livre": "lb", "livres": "lb"})
+QUALITY_VERSION = 'physical-quantities-2.5'
 UNIT_PATTERN = "|".join(re.escape(x) for x in sorted(UNITS, key=len, reverse=True))
 
 
-def identifiers(text):
+def identifiers(text, source_hints=None):
     result = []
     for match in IDENTIFIER.finditer(text):
         value = match.group()
@@ -27,6 +28,12 @@ def identifiers(text):
         if re.fullmatch(r"[A-Z]+-\d+", value) and re.match(r"\s*(?:" + UNIT_PATTERN + r")(?!\w)", text[match.end():]):
             continue
         result.append(value)
+    hints = re.findall(r"\b([A-Z][a-z]{2,})-(\d+)\b", source_hints if source_hints is not None else text)
+    for prefix, value in hints:
+        canonical = prefix.casefold() + '-' + value
+        result = [x for x in result if x.casefold() != canonical]
+        matches = re.findall(r"(?i)\b" + re.escape(prefix) + r"[- ]?" + re.escape(value) + r"\b", text)
+        result.extend([canonical] * len(matches))
     return Counter(result)
 
 
@@ -38,6 +45,8 @@ def numeric_text(text):
 def numbers(text):
     values = []
     text = numeric_text(text)
+    # Unit exponents are dimensions, not added scalar values (m3 / m³ / cubic metres).
+    text = re.sub(r"(?<![A-Za-z])(" + UNIT_PATTERN + r")(?:\^?[23]|[²³])(?![A-Za-z0-9])", r"\1", text)
     # Include numbers embedded in versions and references; matching all components
     # avoids the old 'v2' vs 'version 2' discrepancy.
     for match in NUMBER.finditer(text):
@@ -60,15 +69,19 @@ def measured_values(text):
     # Dimension triplets share their trailing unit, even when axis labels occur.
     dimension = re.compile(r"((?:\d+(?:[.,]\d+)?\s*(?:[HWD]\s*)?[x×]\s*){1,2}\d+(?:[.,]\d+)?\s*(?:[HWD]\s*)?)\s*(" + UNIT_PATTERN + r")(?![A-Za-z])")
     def expand(match):
-        return ' '.join(v + ' ' + match[2] for v in re.findall(r"\d+(?:[.,]\d+)?", match[1]))
+        return ' '.join(v + ' ' + ('inch' if match[2] == 'in' else match[2]) for v in re.findall(r"\d+(?:[.,]\d+)?", match[1]))
     text = dimension.sub(expand, text)
-    pattern = re.compile(r"([-+−–]?\d+(?:[.,]\d+)?)\s*[- ]?\s*(" + UNIT_PATTERN + r")(?![A-Za-z])")
+    pattern = re.compile(r"(?P<value>[-+−–]?\d+(?:[.,]\d+)?)\s*[- ]?\s*(?:(?P<prefix>cubic|square)\s+)?(?P<unit>" + UNIT_PATTERN + r")(?:(?:\^?(?P<power>[23]))|(?P<super>[²³])|\s+(?P<word>cubes?|cubed|carrés?|squared))?(?![A-Za-z])")
     for m in pattern.finditer(text):
-        if m[2] == 'in' and re.match(r'\s+(?![xX]\b)[A-Za-z]', text[m.end():]):
+        power = m['power'] or ({'²': '2', '³': '3'}.get(m['super']))
+        if m['prefix'] or m['word']:
+            power = '3' if (m['prefix'] or m['word']).startswith('cub') else '2'
+        if not power and m['unit'] == 'in' and re.match(r'\s+(?![xX]\b)[A-Za-z]', text[m.end():]):
             continue
-        if m[2] in {'W', 'A', 'V'} and re.match(r"\.\s+[A-Z][A-Za-z]+", text[m.end():]):
-            continue  # Abbreviated proper-name/address component, not a measurement.
-        result.append((str(Decimal(m[1].replace('−', '-').replace('–', '-').replace(',', '.')).normalize()), UNITS[m[2]]))
+        if m['unit'] in {'W', 'A', 'V'} and re.match(r"\.\s+[A-Z][A-Za-z]+", text[m.end():]) and '\n' in text and len(re.findall(r'\b\d{4,6}\b', text)) >= 2:
+            continue
+        unit = UNITS[m['unit']] + ('^' + power if power else '')
+        result.append((str(Decimal(m['value'].replace('−', '-').replace('–', '-').replace(',', '.')).normalize()), unit))
     return Counter(result)
 
 
@@ -98,7 +111,7 @@ def check_text(source, target, unit_id, glossary=None):
         add("numbers", "critical", "Valeurs numériques ajoutées, omises ou modifiées")
     if measured_values(source) != measured_values(target):
         add("value_units", "critical", "Association valeur/unité modifiée")
-    if identifiers(source) != identifiers(target):
+    if identifiers(source) != identifiers(target, source):
         add("identifiers", "critical", "Référence technique ajoutée, omise ou modifiée")
     # Generic review of emphasized phrases inside prose, without a vocabulary list.
     emphasized = re.findall(r"\b[A-Z]{2,}(?:[ -]+[A-Z]{2,})+\b", source)

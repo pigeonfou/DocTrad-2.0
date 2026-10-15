@@ -26,6 +26,8 @@ def restore_unambiguous_units(source, target):
         if len(expected) != 1 or UNITS[match[2]] in expected:
             return match.group()
         unit = next(iter(expected))
+        if '^' in unit:
+            return match.group()
         repairs.append({'value': value, 'candidate_unit': match[2], 'source_unit': unit})
         return match[1] + ' ' + unit
     corrected = pattern.sub(replace, target)

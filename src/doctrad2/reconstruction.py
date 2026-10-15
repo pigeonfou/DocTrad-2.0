@@ -4,7 +4,8 @@ from lxml import etree
 import pymupdf as fitz
 from .domain import QualityReport, Finding
 from .extraction import xml_text_elements
-from .layout import placement_box, text_markup
+from .layout import placement_box, text_markup, COMPOSITION_VERSION
+from .quality import QUALITY_VERSION
 
 
 def pdf_build(data, ir, translations):
@@ -124,7 +125,7 @@ def pdf_build(data, ir, translations):
     with fitz.open(stream=result, filetype="pdf") as reopened:
         if [len(page.get_links()) for page in reopened] != ir.navigation.get("links", []):
             report.findings.append(Finding(code="links", severity="critical", detail="Liens perdus ou ajoutés"))
-    report.metrics = {"pages": len(ir.pages), "composed_units": translated, "native_graphics_preserved": not any(f.code == "graphics_lost" for f in report.findings),
+    report.metrics = {"composition_version": COMPOSITION_VERSION, "quality_version": QUALITY_VERSION, "pages": len(ir.pages), "composed_units": translated, "native_graphics_preserved": not any(f.code == "graphics_lost" for f in report.findings),
                       "text_masks": masks, "font_policy": "weighted_source_style;bounded_columns;max_15pct_reduction"}
     return result, report
 

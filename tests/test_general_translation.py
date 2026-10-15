@@ -237,3 +237,13 @@ def test_shielded_retry_cannot_exceed_the_actual_input_token_budget(settings):
     _, provenance = translator.translate('Supply 48 V')
     assert len(calls) == 2
     assert provenance['chunks'][0]['rejected_attempts'] == [{'reason': 'literal_prompt_exceeds_input_budget'}]
+
+
+def test_powers_and_dimension_boundaries_are_physical_units_not_extra_values():
+    assert not [f for f in check_text('Volume 81 in3', 'Volume 81 pouces cubes', 'n') if f.severity == 'critical']
+    assert measured_values('Volume 81 in3') != measured_values('Volume 81 inches')
+    assert measured_values('Area 18 m²') == measured_values('Surface 18 mètres carrés'.replace('mètres', 'm'))
+    assert measured_values('2 H x 4 W x 6 D in. Max pressure 7 bar.') == measured_values('2 H x 4 W x 6 D in Pression maximale 7 bars.')
+    assert not [f for f in check_text('Type-8 protection', 'Protection de type 8', 'n') if f.severity == 'critical']
+    assert any(f.code == 'identifiers' for f in check_text('Falcon-6 device', 'Appareil Falcon 7', 'n'))
+    assert measured_values('Supply 24 V. Disconnect power. Current 3.5 A.') == measured_values('Alimentation 24 V. Débranchez. Courant 3,5 A.')

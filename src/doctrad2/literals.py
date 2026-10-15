@@ -19,7 +19,7 @@ def protected_spans(text):
             add(match)
     refs = identifiers(text)
     for match in IDENTIFIER.finditer(text):
-        if match.group() in refs:
+        if any(value in refs for value in identifiers(match.group())):
             add(match)
     for match in QUANTITY.finditer(text):
         if re.search(r'\bin$', match.group()) and re.match(r'\s+(?![xX]\b)[A-Za-z]', text[match.end():]):

@@ -12,6 +12,8 @@ from doctrad2.storage import Artifacts, digest, key
 from doctrad2.prompts import TEMPLATE_SHA
 from doctrad2.text_policy import POLICY_VERSION
 from doctrad2.inference import LlamaTranslator
+from doctrad2.layout import COMPOSITION_VERSION
+from doctrad2.quality import QUALITY_VERSION
 
 SOURCE_SHA = 'cc6a5ca2bd9fad41fce19136afd7aaca3315a783a52348a4984bf11d8b8e41f6'
 
@@ -38,6 +40,11 @@ def run_reference(settings, relative, expected_sha, label, output_name, export_s
             db.log(s, jid, 'reference_queued', {'source_sha': source_sha})
     with db.session() as s:
         job = s.get(Job, jid)
+        if job.status == 'quality_blocked' and 'report' in job.artifacts:
+            prior = store.read_json(job.artifacts['report']).get('metrics', {})
+            if prior.get('composition_version') != COMPOSITION_VERSION or prior.get('quality_version') != QUALITY_VERSION:
+                job.status, job.error, job.revision = 'queued', None, job.revision + 1
+                db.log(s, jid, 'reference_recompose', {'composition': COMPOSITION_VERSION, 'quality': QUALITY_VERSION})
         if job.status == "runtime_failed" and ((job.error or "").startswith("llm_transport_failed") or job.error == "IndexError"):
             job.status, job.error = "queued", None
             db.log(s, jid, "reference_transport_resume")
