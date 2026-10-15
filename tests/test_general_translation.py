@@ -207,3 +207,15 @@ def test_alternate_prefers_consistency_with_a_source_derived_emphasized_term(set
     target, provenance = translator.translate('Beware of HIGH VOLTAGE.')
     assert target == 'Attention à la HAUTE TENSION.'
     assert provenance['chunks'][0]['selected_attempt'] == 1
+
+
+def test_supervised_runtime_can_recover_during_bounded_transport_backoff(settings, monkeypatch):
+    delays, calls = [], []
+    monkeypatch.setattr('doctrad2.inference.time.sleep', delays.append)
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(503 if len(calls) < 6 else 200, json={'ready': True})
+    translator = LlamaTranslator(settings, httpx.MockTransport(handler))
+    assert translator.request('/props') == {'ready': True}
+    assert calls == ['/props'] * 6
+    assert delays == [1, 3, 10, 20, 30]
