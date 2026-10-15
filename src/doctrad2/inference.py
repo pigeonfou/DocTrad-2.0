@@ -7,6 +7,7 @@ from .prompts import render, messages, TEMPLATE_SHA
 from .text_policy import translation_source, sentence_parts, POLICY_VERSION
 from .quality import check_text
 from .fidelity import restore_unambiguous_units
+from .literals import shield, restore, literal_only
 
 
 class InferenceError(RuntimeError):
@@ -115,7 +116,10 @@ class LlamaTranslator:
         # Short emphasized phrases are translated independently, then supplied as
         # normal user/assistant examples using the official conversation schema.
         # These terms are derived from this source, never a document wordlist.
+        if literal_only(source_text):
+            return text, {'contract': self.contract.model_dump(), 'translation_policy': POLICY_VERSION, 'literal_only': True, 'chunks': []}
         terms = re.findall(r"\b[A-Z]{2,}(?:[ -]+[A-Z]{2,}){1,3}\b", source_text)
+        terms += re.findall(r'\b[A-Za-z]+(?:-[A-Za-z]+)+\b', source_text)
         for term in dict.fromkeys(terms):
             if term == source_text or len(term) > 60 or len(self.examples) >= 3:
                 continue
@@ -150,6 +154,14 @@ class LlamaTranslator:
                     issues = check_text(source, candidate['target'], '')
                     return (sum(f.severity == 'critical' for f in issues),
                             sum(f.severity == 'review' for f in issues), len(candidate['target']))
+                if min(rank(c)[0] for c in candidates) > 0:
+                    masked, mapping = shield(source)
+                    if mapping:
+                        masked_target, masked_info = self.complete(self.prompt(masked))
+                        restored = restore(masked_target, mapping)
+                        if restored is not None:
+                            candidates.append({"target": restored, "raw_target": masked_target, "unit_repairs": [],
+                                               "generation": {**masked_info, "literal_spans": mapping}})
                 selected = min(range(len(candidates)), key=lambda index: rank(candidates[index]))
                 target = candidates[selected]['target']
                 outputs.append(target)

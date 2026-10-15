@@ -64,6 +64,8 @@ def measured_values(text):
     text = dimension.sub(expand, text)
     pattern = re.compile(r"([-+−–]?\d+(?:[.,]\d+)?)\s*[- ]?\s*(" + UNIT_PATTERN + r")(?![A-Za-z])")
     for m in pattern.finditer(text):
+        if m[2] == 'in' and re.match(r'\s+(?![xX]\b)[A-Za-z]', text[m.end():]):
+            continue
         if m[2] in {'W', 'A', 'V'} and re.match(r"\.\s+[A-Z][A-Za-z]+", text[m.end():]):
             continue  # Abbreviated proper-name/address component, not a measurement.
         result.append((str(Decimal(m[1].replace('−', '-').replace('–', '-').replace(',', '.')).normalize()), UNITS[m[2]]))

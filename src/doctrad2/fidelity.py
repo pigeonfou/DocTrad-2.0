@@ -19,7 +19,7 @@ def restore_unambiguous_units(source, target):
     repairs = []
     pattern = re.compile(r'([-+−–]?\d+(?:[.,]\d+)?)\s*(' + UNIT_PATTERN + r')(?![A-Za-z])')
     def replace(match):
-        if match[2] == 'in' and re.match(r'\s+[a-zA-Z]', target[match.end():]):
+        if match[2] == 'in' and re.match(r'\s+(?![xX]\b)[a-zA-Z]', target[match.end():]):
             return match.group()
         value = str(Decimal(match[1].replace('−', '-').replace('–', '-').replace(',', '.')).normalize())
         expected = units.get(value, set())

@@ -153,3 +153,41 @@ def test_nonorthogonal_vector_text_is_translated_without_flattening(angle):
         assert 'Safety' not in text
         assert 'curité' in text
         assert not output[0].get_images()
+
+
+def test_opaque_spans_are_derived_from_arbitrary_source_and_validate_all_markers():
+    from doctrad2.literals import shield, restore, literal_only
+    source = 'Use 48 V with 6 A; size 3 H x 5 W x 9 D in; see https://example.net/help.'
+    masked, mapping = shield(source)
+    assert '48 V' not in masked and '3 H' not in masked and 'https://' not in masked
+    assert restore(masked, mapping) == source
+    assert restore(masked.replace(next(iter(mapping)), 'unknown'), mapping) is None
+    assert restore(masked + masked, mapping) is None
+    assert literal_only('https://example.net/help')
+    assert literal_only('48 V - 6 A')
+    assert not literal_only('Version 8.2 in development')
+    assert not [f for f in check_text('Version 8.2 in development', 'Version 8.2 en développement', 'n') if f.code == 'value_units']
+
+
+def test_failed_numeric_candidates_use_a_bounded_literal_retry(settings):
+    import re
+    latest = ''
+    completions = []
+    def handler(request):
+        nonlocal latest
+        payload = json.loads(request.content) if request.content else {}
+        if request.url.path == '/props':
+            return httpx.Response(200, json={'model_path': 'translategemma-12b-it.gguf', 'default_generation_settings': {'n_ctx': 4096}})
+        if request.url.path == '/tokenize':
+            latest = payload['content']
+            return httpx.Response(200, json={'tokens': [1, 2]})
+        completions.append(latest)
+        markers = re.findall(r'<x id="[^"]+"/>', latest)
+        content = 'Dimensions : ' + ' '.join(markers) if markers else 'Dimensions : 5 cm x 10 cm x 15 cm.'
+        return httpx.Response(200, json={'content': content})
+    translator = LlamaTranslator(settings, httpx.MockTransport(handler))
+    target, provenance = translator.translate('Dimensions: 2 H x 4 W x 6 D in.')
+    assert '2 H x 4 W x 6 D in' in target
+    assert '5 cm' not in target
+    assert len(completions) == 3
+    assert provenance['chunks'][0]['selected_attempt'] == 2
