@@ -64,6 +64,18 @@ def main():
                    'public_enabled': config.get('public_enabled') and 'doctrad2' in config.get('public_apps', []),
                    'public_url': record.get('url'), 'public_status': record.get('status'),
                    'lan_url': (f"https://{config['lan_ip']}:{config['lan_port']}/doctrad2/" if config.get('routing_mode') == 'paths' else f"https://doctrad2.{config['domain']}:{config['lan_port']}/")}
+        host = ('www' if config.get('routing_mode') == 'paths' else 'doctrad2') + '.' + config['domain']
+        base = '/doctrad2/' if config.get('routing_mode') == 'paths' else '/'
+        summary['lan_url'] = f"https://{host}:{config['lan_port']}{base}"
+        checks = {}
+        for suffix, expected in [('', 200), ('static/app.js', 200), ('v2/session', 200), ('v2/jobs', 401)]:
+            probe = subprocess.run(['curl', '--noproxy', '*', '--silent', '--show-error', '--max-time', '8',
+                '--resolve', f"{host}:{config['lan_port']}:{config['lan_ip']}", '--cacert', config['certificate'],
+                '--output', '/dev/null', '--write-out', '%{http_code}', summary['lan_url'] + suffix], capture_output=True, text=True)
+            checks[suffix or 'interface'] = probe.stdout.strip()
+            if probe.returncode or probe.stdout.strip() != str(expected):
+                raise RuntimeError('OneForAll frontend validation failed: ' + suffix)
+        summary['frontend_checks'] = checks
         Path('/var/lib/doctrad2/oneforall-integration.json').write_text(json.dumps(summary))
         print(json.dumps(summary))
     except Exception:

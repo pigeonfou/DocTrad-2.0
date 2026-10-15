@@ -37,6 +37,9 @@ source /etc/doctrad2/app.env
 set +a
 runuser -u doctrad2 --preserve-environment -- "$RELEASE/.venv/bin/doctrad2" migrate
 "$RELEASE/.venv/bin/python" "$RELEASE/scripts/prepare-server.py" users "$RELEASE/.venv/bin/python"
+if [[ -e /opt/doctrad2/current ]]; then
+    python3 "$RELEASE/scripts/integrate-oneforall.py"
+fi
 python3 "$RELEASE/scripts/client-identity.py"
 "$RELEASE/.venv/bin/python" "$RELEASE/scripts/configure-gateway.py" "$RELEASE/deploy/bc250-connection.json"
 set -a
