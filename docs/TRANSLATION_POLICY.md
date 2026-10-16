@@ -26,7 +26,7 @@ Les erreurs de transport temporaires disposent d’une reprise bornée laissant 
 
 Les intervalles sont conservés comme des littéraux complets, avec leurs deux bornes et leurs unités : isoler seulement la borne finale peut transformer un séparateur en signe négatif. Le classement des candidats donne priorité à l’intégrité des chiffres, unités, références et URL ; un défaut numérique n’est pas préféré à plusieurs défauts de libellé simplement parce qu’il produit moins d’alertes.
 
-Dans un champ constitué uniquement de littéraux numériques, le connecteur anglais d’un intervalle est rendu par un séparateur mathématique. Les bornes, signes et unités ne changent pas ; les URL et les corrections humaines sont exclues. Ce rendu déterministe est versionné séparément, conserve sa valeur source et peut être réappliqué aux anciens candidats littéraux lors d’une recomposition, sans nouvelle inférence.
+Dans un champ constitué uniquement de littéraux numériques, le connecteur anglais d’un intervalle est rendu par le connecteur français « à », sans ambiguïté entre intervalle et soustraction pour les bornes négatives. Les bornes, signes et unités ne changent pas ; les URL et les corrections humaines sont exclues. Ce rendu déterministe est versionné séparément, conserve sa valeur source et peut être réappliqué aux anciens candidats littéraux lors d’une recomposition, sans nouvelle inférence.
 
 ## Composition
 

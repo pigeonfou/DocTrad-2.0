@@ -33,7 +33,7 @@ def test_completed_literal_can_be_rendered_without_inference_or_overwriting_huma
     with database.session() as s:
         unit = s.get(Unit, (jid, ir.nodes[0].id))
         assert unit.source == '18 VDC to 35 VDC'
-        assert unit.target == ('18 VDC to 35 VDC' if human else '18 VDC - 35 VDC')
+        assert unit.target == ('18 VDC to 35 VDC' if human else '18 VDC à 35 VDC')
         assert unit.version == (0 if human else 1)
         assert s.get(Job, jid).contract == contract
         assert s.get(Job, jid).status == 'ready_for_review'

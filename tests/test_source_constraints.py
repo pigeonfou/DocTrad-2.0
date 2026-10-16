@@ -163,9 +163,9 @@ def test_candidate_selection_never_prefers_numeric_damage_to_missing_labels(sett
     translator.close()
 
 
-@pytest.mark.parametrize('source,target', [('18 VDC to 35 VDC', '18 VDC - 35 VDC'),
-                                         ('-30 to 85 °C', '-30 - 85 °C'),
-                                         ('-30 to -10 °C', '-30 - -10 °C')])
+@pytest.mark.parametrize('source,target', [('18 VDC to 35 VDC', '18 VDC à 35 VDC'),
+                                         ('-30 to 85 °C', '-30 à 85 °C'),
+                                         ('-30 to -10 °C', '-30 à -10 °C')])
 def test_literal_range_rendering_keeps_signed_values_and_units(source, target):
     from doctrad2.literals import render_literal
     assert render_literal(source) == target

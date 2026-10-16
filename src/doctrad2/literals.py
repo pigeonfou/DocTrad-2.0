@@ -77,6 +77,6 @@ def render_literal(text):
     def relation(match):
         if any(match.start() < end and match.end() > start for start, end in urls):
             return match.group()
-        return re.sub(r'\s*\bto\b\s*', ' - ', match.group())
+        return re.sub(r'\s*\bto\b\s*', ' à ', match.group())
     return RANGE.sub(relation, text)
 

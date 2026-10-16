@@ -118,7 +118,7 @@ class LlamaTranslator:
             target = render_literal(text)
             return target, {"contract": self.contract.model_dump(), "translation_policy": POLICY_VERSION,
                             "prompt_sha": PROMPT_SHA, "literal_only": True, "chunks": [],
-                            **({'literal_rendering': {'version': 'math-ranges-1', 'source_target': text}} if target != text else {})}
+                            **({'literal_rendering': {'version': 'french-ranges-1', 'source_target': text}} if target != text else {})}
         bullet = re.match(r"^([>•›])\s+(?=[A-Za-z])", source_text)
         prefix = bullet.group() if bullet else ''
         if prefix:

@@ -5,7 +5,7 @@ import re
 import pymupdf as fitz
 from .text_policy import translation_source
 
-COMPOSITION_VERSION = "bounded-style-2.7"
+COMPOSITION_VERSION = "bounded-style-2.8"
 
 
 def source_style(node):
