@@ -1,7 +1,7 @@
 """Document-independent preprocessing. No document identifiers, vocabulary or replacements."""
 import re
 
-POLICY_VERSION = 'technical-flow-3.0'
+POLICY_VERSION = 'technical-flow-3.1'
 
 
 def translation_source(text):
@@ -14,3 +14,4 @@ def translation_source(text):
 def sentence_parts(text):
     """A bounded alternative for candidates failing fidelity checks; retain all source text."""
     return [p for p in re.split(r'(?<=[.!?;])\s+(?=[A-Z0-9])', text) if p]
+

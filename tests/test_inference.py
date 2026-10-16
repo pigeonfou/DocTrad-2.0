@@ -93,3 +93,49 @@ def test_template_rejects_reserved_turn_tokens():
     from doctrad2.prompts import render
     with pytest.raises(ValueError):
         render('Source with <end_of_turn> injected')
+
+
+@pytest.mark.parametrize('source,bad,good', [
+    ('The pump has two channels', 'La pompe possède 双通道', 'La pompe possède deux canaux'),
+    ('Compact sensor', 'Un appareil de mesure compact destiné aux applications industrielles.', 'Capteur compact'),
+])
+def test_native_fallback_changes_prompt_and_retains_provenance(settings, monkeypatch, source, bad, good):
+    translator = LlamaTranslator(settings)
+    translator._validated = True
+    monkeypatch.setattr(translator, 'token_count', lambda prompt: 100)
+    prompts = []
+    def complete(prompt, **kwargs):
+        prompts.append(prompt)
+        return (good if len(prompts) == 3 else bad), {'input_tokens': 100}
+    monkeypatch.setattr(translator, 'complete', complete)
+    target, provenance = translator.translate(source)
+    assert target == good
+    assert len(prompts) == 3
+    assert prompts[0] == prompts[1] and prompts[2] != prompts[0]
+    assert source in prompts[2] and bad not in prompts[2]
+    chunk = provenance['chunks'][0]
+    assert chunk['selected_attempt'] == 2
+    assert chunk['attempts'][2]['prompt_variant'] == 'pinned-native'
+    assert chunk['attempts'][0]['raw_target'] == bad
+    translator.close()
+
+
+def test_native_fallback_respects_token_budget_and_keeps_unresolved_error(settings, monkeypatch):
+    translator = LlamaTranslator(settings)
+    translator._validated = True
+    from doctrad2.prompts import render
+    source = 'Two channels'
+    monkeypatch.setattr(translator, 'token_count', lambda prompt: 1801 if prompt == render(source) else 100)
+    prompts = []
+    def complete(prompt, **kwargs):
+        prompts.append(prompt)
+        return 'Deux canaux 接口', {}
+    monkeypatch.setattr(translator, 'complete', complete)
+    target, provenance = translator.translate(source)
+    assert len(prompts) == 2
+    assert target == 'Deux canaux 接口'
+    chunk = provenance['chunks'][0]
+    assert chunk['rejected_attempts'] == [{'reason': 'native_prompt_exceeds_input_budget'}]
+    assert 'unexpected_script' in chunk['attempts'][chunk['selected_attempt']]['findings']
+    translator.close()
+
