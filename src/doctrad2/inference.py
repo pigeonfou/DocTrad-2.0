@@ -137,9 +137,10 @@ class LlamaTranslator:
                     candidates.append({"target": corrected, "raw_target": alternate, "unit_repairs": repairs, "generation": alternate_info})
                 def rank(candidate):
                     issues = check_text(source, candidate['target'], '')
-                    return (sum(f.severity == 'critical' for f in issues),
+                    return (sum(f.severity == 'critical' and f.code in {'numbers', 'value_units', 'identifiers', 'urls'} for f in issues),
+                            sum(f.severity == 'critical' for f in issues),
                             sum(f.severity == 'review' for f in issues))
-                if min(rank(c)[0] for c in candidates) > 0:
+                if min(rank(c)[1] for c in candidates) > 0:
                     best = min(candidates, key=rank)
                     missing = acronyms(source) - acronyms(best['target'])
                     masked, mapping = shield(source, required=missing)

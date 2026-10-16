@@ -1,4 +1,4 @@
-# Politique générale — technical-flow-3.2
+# Politique générale — technical-flow-3.3
 
 Cette politique ne contient aucun nom de document, identifiant de produit ou remplacement lexical propre à une référence. Les textes et empreintes des documents d’essai sont confinés aux benchmarks.
 
@@ -23,6 +23,8 @@ Les contrôles distinguent les intervalles, signes, versions, descriptions numé
 Une graphie d’unité inconnue ne peut être rapprochée d’une graphie source connue que si elles diffèrent d’une seule lettre, ont la même longueur et accompagnent la même valeur dans le même passage. Une correspondance unique est nécessaire. La source reste intacte et le rapprochement produit une alerte de révision humaine ; une mesure différente reste bloquante. La conservation de la graphie source ambiguë reste possible avec cette même alerte. Sans preuve locale, aucun rapprochement n’est effectué.
 
 Les erreurs de transport temporaires disposent d’une reprise bornée laissant le temps au service BC250 de redémarrer. Les erreurs d’authentification ou de protocole ne sont pas assimilées à ces indisponibilités. Les unités déjà enregistrées sont conservées.
+
+Les intervalles sont conservés comme des littéraux complets, avec leurs deux bornes et leurs unités : isoler seulement la borne finale peut transformer un séparateur en signe négatif. Le classement des candidats donne priorité à l’intégrité des chiffres, unités, références et URL ; un défaut numérique n’est pas préféré à plusieurs défauts de libellé simplement parce qu’il produit moins d’alertes.
 
 ## Composition
 

@@ -7,6 +7,9 @@ from .constraints import source_labels
 URL = re.compile(r'(?:https?://|www\.)[^\s<>]+')
 QUANTITY = re.compile(r'[-+−–]?\d+(?:[.,]\d+)?\s*[- ]?\s*(?:' + UNIT_PATTERN + r')(?:\^?[23]|[²³])?(?![A-Za-z])')
 DIMENSIONS = re.compile(r'(?:\d+(?:[.,]\d+)?\s*(?:[HWD]\s*)?[x×]\s*){1,2}\d+(?:[.,]\d+)?\s*(?:[HWD]\s*)?(?:' + UNIT_PATTERN + r')(?![A-Za-z])')
+RANGE = re.compile(r'[-+−–]?\d+(?:[.,]\d+)?\s*(?:(?:' + UNIT_PATTERN + r')\s*)?'
+                   r'(?:[-−–]|\bto\b|\bà\b)\s*[-+−–]?\d+(?:[.,]\d+)?\s*'
+                   r'(?:' + UNIT_PATTERN + r')(?:\^?[23]|[²³])?(?![A-Za-z])')
 
 
 def protected_spans(text, required=()):
@@ -15,7 +18,7 @@ def protected_spans(text, required=()):
         if any(match.start() < end and match.end() > start for start, end in chosen):
             return
         chosen.append((match.start(), match.end()))
-    for pattern in (URL, DIMENSIONS):
+    for pattern in (URL, DIMENSIONS, RANGE):
         for match in pattern.finditer(text):
             add(match)
     for label in source_labels(text):

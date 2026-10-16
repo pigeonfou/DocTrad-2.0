@@ -133,3 +133,31 @@ def test_optional_baseline_alignment_cannot_turn_a_fitting_block_into_overflow()
         text = translated[0].get_text()
         assert 'capteur compact' in text and 'Next independent paragraph' in text
         assert 'Compact monitoring' not in text
+
+
+@pytest.mark.parametrize('value', ['24-160 MHz', '-30 to 85 °C', '6 kHz-18 MHz', '12–48 V'])
+def test_complete_ranges_are_opaque_and_cannot_become_negative_bounds(value):
+    from doctrad2.literals import shield, restore
+    source = 'Operating range: ' + value + '; confirm ADC mode.'
+    masked, mapping = shield(source, required=['ADC'])
+    assert value in mapping.values()
+    assert restore(masked, mapping) == source
+    assert value not in masked
+
+
+def test_candidate_selection_never_prefers_numeric_damage_to_missing_labels(settings):
+    responses = iter(['Le circuit fonctionne sous 9 V.', 'Le circuit ADC utilise FLAG ONE sous 90 V.', 'Marqueurs absents'])
+    def handler(request):
+        if request.url.path == '/props':
+            return httpx.Response(200, json={'model_path': 'translategemma-12b-it.gguf', 'default_generation_settings': {'n_ctx': 4096}})
+        if request.url.path == '/tokenize':
+            return httpx.Response(200, json={'tokens': [1, 2, 3]})
+        return httpx.Response(200, json={'content': next(responses)})
+    translator = LlamaTranslator(settings, httpx.MockTransport(handler))
+    source = 'The ADC circuit uses FLAG ONE at exactly 9 V.'
+    target, provenance = translator.translate(source)
+    assert target == 'Le circuit fonctionne sous 9 V.'
+    assert provenance['chunks'][0]['selected_attempt'] == 0
+    assert not any(f.code in {'numbers', 'value_units'} for f in check_text(source, target, 'n'))
+    assert any(f.severity == 'critical' for f in check_text(source, target, 'n'))
+    translator.close()
