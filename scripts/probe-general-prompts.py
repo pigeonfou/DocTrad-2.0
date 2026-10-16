@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Public, independent prompt experiment; no production translation is rewritten here."""
 import json
+import re
 from pathlib import Path
 from doctrad2.config import Settings
 from doctrad2.db import Database
@@ -59,12 +60,18 @@ def main():
         try:
             translator.validate()
             for label, source in CASES:
+                if label not in {'formal_degree', 'classification', 'technical_term', 'label', 'acronyms', 'portable_channels'}:
+                    continue
                 french = '<bos><start_of_turn>user\n' + FRENCH_RULES + source + '<end_of_turn>\n<start_of_turn>model\n'
+                labels = re.findall(r'\b[A-Z]{2,}(?:[ -]+[A-Z]{2,})+\b', source)
+                extra = 'Retain these source labels verbatim, without translation or substitution: ' + json.dumps(labels) + '.\n' if labels else ''
+                if label == 'technical_term':
+                    extra += 'Context (not to translate): table heading TRANSMITTER; neighboring value > -53dBc.\n'
+                guarded = render_technical(source).replace('\nSOURCE:\n', '\n' + extra + 'SOURCE:\n')
                 prompts = {
                     'strict_direct': (render_technical(source), None),
-                    'french_direct': (french, None),
-                    'latin_direct': (render_technical(source), LATIN_GRAMMAR),
-                    'french_latin': (french, LATIN_GRAMMAR),
+                    'context_labels': (guarded, LATIN_GRAMMAR),
+                    'french_context_labels': (french.replace('Texte anglais :\n', extra + 'Texte anglais :\n'), LATIN_GRAMMAR),
                 }
                 for profile, (prompt, grammar) in prompts.items():
                     target, info = generate(translator, prompt, grammar)
