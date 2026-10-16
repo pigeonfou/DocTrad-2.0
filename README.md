@@ -21,7 +21,7 @@ Il s’agit de la première implémentation fonctionnelle de la nouvelle archite
 
 Le moteur doit exposer les endpoints natifs requis. Si son GGUF est Content-only, V2 rend localement le template de référence TranslateGemma, puis utilise le tokenizer réel. Le simple fait qu’un binaire existe ne valide pas cette compatibilité. Le diagnostic refuse un modèle incompatible au lieu de passer silencieusement par Unsloth. Voir [compatibilité du template](docs/TEMPLATE.md).
 
-Le contexte documentaire est conservé pour les contrôles et la révision ; le profil spécialisé envoie au traducteur uniquement le contenu source avec son template officiel. **L’enrichissement automatique du prompt et la revue sémantique par un second modèle ne sont pas activés ni présentés comme déjà validés.** Le glossaire sert actuellement au contrôle. La postédition multimodèle nécessite un benchmark et une gestion séquentielle des modèles sur la seule BC-250.
+Le profil technique utilise le contenu source et, pour les fragments courts d’un tableau, ses titres et voisins déjà extraits. Une reprise peut contraindre l’écriture et conserver des littéraux dérivés de la source, sans dictionnaire propre à un document. Les essais et limites sont décrits dans [la politique de traduction](docs/TRANSLATION_POLICY.md). **La revue sémantique par un second modèle n’est pas activée.** Le glossaire sert au contrôle. La postédition multimodèle nécessite un benchmark et une gestion séquentielle des modèles sur la seule BC-250.
 
 Les angles non orthogonaux, fonds de scans complexes, désaccords d’extraction et débordements sont signalés ou bloqués. Les masques de scans exigent une inspection humaine. Les fontes source sont inventoriées mais ne sont pas encore systématiquement réembarquées : le composeur utilise des fontes locales de remplacement. Le mapping de styles OOXML est proportionnel, pas un alignement sémantique parfait des mots. Pas de promesse de pagination identique sans moteur bureautique local. La validation terminée conduit à **prêt à réviser**, jamais à une approbation implicite.
 
@@ -45,3 +45,4 @@ Le benchmark sans `--translate` est un test d’extraction/reconstruction à tex
 ## Licence
 
 AGPL-3.0-or-later, cohérente avec l’utilisation de PyMuPDF sous AGPL. Les conditions des modèles et dépendances sont distinctes. Les GGUF, clés, documents et journaux privés ne sont jamais publiés dans ce dépôt.
+

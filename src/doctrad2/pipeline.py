@@ -117,7 +117,7 @@ class Pipeline:
                 else:
                     if translator is None:
                         translator = self.translator_factory(self.settings)
-                    target, provenance = translator.translate(node.text)
+                    target, provenance = translator.translate(node.text, context=node.context)
                     provenance["review_context"] = node.context
                 findings = check_text(node.text, target, node.id, glossary)
                 with self.db.session() as s:
@@ -170,3 +170,4 @@ class Pipeline:
                 return bool(claimed)
             if not claimed:
                 time.sleep(2)
+

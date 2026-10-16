@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation
 import re
 import unicodedata
 from .domain import Finding
+from .constraints import source_labels
 
 NUMBER = re.compile(r"[-+−–]?\d+(?:[.,]\d+)?(?:[eE][-+]?\d+)?")
 IDENTIFIER = re.compile(r"\b(?=[A-Za-z0-9_./-]*[A-Za-z])(?=[A-Za-z0-9_./-]*\d)[A-Za-z0-9]+(?:[-_/][A-Za-z0-9]+)+\b")
@@ -12,7 +13,7 @@ UNITS.update({"Ω": "Ω", "ohm": "Ω", "ohms": "Ω", "mile": "mile", "miles": "m
               "inch": "in", "inches": "in", "pouce": "in", "pouces": "in", "ft": "ft",
               "feet": "ft", "foot": "ft", "pied": "ft", "pieds": "ft", "lbs": "lb", "lb": "lb",
               "pound": "lb", "pounds": "lb", "livre": "lb", "livres": "lb"})
-QUALITY_VERSION = 'physical-quantities-2.6'
+QUALITY_VERSION = 'physical-quantities-2.7'
 UNITS.update({'watt': 'W', 'watts': 'W', 'volt': 'V', 'volts': 'V', 'ampere': 'A', 'amperes': 'A',
               'ampère': 'A', 'ampères': 'A', 'bar': 'bar', 'bars': 'bar', 'Pa': 'Pa', 'kPa': 'kPa',
               'MPa': 'MPa', 'mbar': 'mbar', 'psi': 'psi', '°F': '°F', 'K': 'K', 'dBc': 'dBc',
@@ -103,6 +104,39 @@ def scripts(text):
     return result
 
 
+def source_unit_spellings(text):
+    """Identify a single-letter unit inconsistency backed by the same source value.
+
+    This never changes the uploaded source. A matching translation still requires
+    human review; absent or competing source evidence leaves the critical check intact.
+    """
+    pattern = re.compile(r'(?P<value>\d+(?:[.,]\d+)?)\s*[- ]\s*(?P<word>[a-z]{3,})(?![A-Za-z])')
+    matches = list(pattern.finditer(text))
+    known = {}
+    for match in matches:
+        if match['word'] in UNITS:
+            value = Decimal(match['value'].replace(',', '.'))
+            known.setdefault(value, set()).add(match['word'])
+    notes = []
+    def replace(match):
+        word = match['word']
+        if word in UNITS:
+            return match.group()
+        alternatives = [unit for unit in known.get(Decimal(match['value'].replace(',', '.')), ())
+                        if len(unit) == len(word) and sum(a != b for a, b in zip(unit, word)) == 1]
+        if len(alternatives) != 1:
+            return match.group()
+        replacement = alternatives[0]
+        notes.append({'source': word, 'supported_unit': replacement, 'value': match['value']})
+        return match.group()[:match.start('word') - match.start()] + replacement
+    return pattern.sub(replace, text), notes
+
+
+def acronyms(text):
+    return Counter(term for term in re.findall(r'\b([A-Z][A-Z0-9]{1,})(?:s)?\b', text)
+                   if term not in UNITS)
+
+
 def check_text(source, target, unit_id, glossary=None):
     findings = []
     def add(code, severity, detail):
@@ -114,14 +148,24 @@ def check_text(source, target, unit_id, glossary=None):
         add("unexpected_script", "critical", "Écriture étrangère ajoutée à une traduction française")
     if numbers(source) != numbers(target):
         add("numbers", "critical", "Valeurs numériques ajoutées, omises ou modifiées")
-    if measured_values(source) != measured_values(target):
+    qualified_source, unit_notes = source_unit_spellings(source)
+    if measured_values(qualified_source) != measured_values(target):
         add("value_units", "critical", "Association valeur/unité modifiée")
+    for note in unit_notes:
+        add('source_unit_spelling', 'review',
+            f"Unité source ambiguë « {note['source']} » pour {note['value']} ; « {note['supported_unit']} » apparaît avec la même valeur dans ce passage. Vérification requise.")
     if identifiers(source) != identifiers(target, source):
         add("identifiers", "critical", "Référence technique ajoutée, omise ou modifiée")
+    if len(source.split()) >= 7 and re.search(r'[a-z]', source):
+        if acronyms(source) - acronyms(target):
+            add('acronyms', 'critical', 'Sigle source omis ou remplacé dans la traduction')
     # Generic review of emphasized phrases inside prose, without a vocabulary list.
     emphasized = re.findall(r"\b[A-Z]{2,}(?:[ -]+[A-Z]{2,})+\b", source)
     if re.search(r"[a-z]", source) and any(term not in target for term in emphasized):
         add("emphasized_phrase", "review", "Expression source en capitales traduite : vérifier le sens et le degré")
+    if any(not re.search(r'\b' + r'[\W_]+'.join(re.escape(w) for w in re.findall(r'[A-Z0-9]+', label)) + r'\b', target)
+           for label in source_labels(source)):
+        add('formal_label', 'critical', 'Libellé source en capitales remplacé dans un passage : sens et degré non garantis')
     if len(target) > max(200, len(source) * 3) or len(target) < len(source) * .35:
         add("length_ratio", "review", "Rapport de longueur inhabituel : vérifier omission ou ajout")
     if target.strip().casefold() == source.strip().casefold() and len(source.split()) >= 5:
@@ -132,3 +176,4 @@ def check_text(source, target, unit_id, glossary=None):
         if re.search(r"(?<!\w)" + re.escape(term) + r"(?!\w)", source, re.I) and translated.casefold() not in target.casefold():
             add("glossary", "review", "Terme du glossaire absent de la traduction")
     return findings
+

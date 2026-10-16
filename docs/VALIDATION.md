@@ -2,7 +2,7 @@
 
 ## Tests automatisés
 
-38 tests locaux couvrent : parcours import → traduction simulée → export → correction → recomposition → approbation, invariants numériques et références, association valeur/unité, normalisation décimale, refus des endpoints externes, template/tokenizer natifs, troncature, absence de retry sur authentification, segmentation, conservation de graphiques/liens/signets, rotations de pages, maintien des styles OOXML, cache, leases et séparation des utilisateurs.
+Les tests locaux couvrent : parcours import → traduction simulée → export → correction → recomposition → approbation, invariants numériques et références, association valeur/unité, normalisation décimale, refus des endpoints externes, template/tokenizer natifs, troncature, absence de retry sur authentification, segmentation, conservation de graphiques/liens/signets, rotations de pages, maintien des styles OOXML, cache, leases et séparation des utilisateurs. Les régressions comprennent aussi le décodage contraint après une écriture inattendue, les marqueurs de libellés et de sigles omis, les unités source ambiguës, le contexte de tableaux et l’alignement facultatif d’un bloc français déjà ajusté.
 
 Le moteur d’inférence est simulé **uniquement dans les tests**. Aucun résultat de vitesse/qualité réelle de traduction BC-250 ne découle de ces tests. Lint et syntaxe shell sont également vérifiés. CI exécute 3.12 et 3.14 sur Ubuntu 24.04 ; compatibilité réelle Ubuntu 26 à confirmer sur l’hôte.
 
@@ -21,3 +21,4 @@ Les essais à texte identique sur AN/PRC-167 et TSM-WAVEFORM servent à éprouve
 ## Limites de validation
 
 La comparaison visuelle échantillonnée hors masques ne prouve pas toute la fidélité et ne remplace pas une inspection des cellules et schémas. Comptages de graphismes/liens complètent ce contrôle sans certifier chaque objet. Le contrôle chiffres/unités n’interprète pas encore toutes les notations mathématiques ou conversions ; les transformations d’unités ne sont pas autorisées automatiquement. Le glossaire est un contrôle littéral initial : ambiguïtés et flexions nécessitent révision.
+

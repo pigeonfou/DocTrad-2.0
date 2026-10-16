@@ -18,6 +18,7 @@ def pdf_build(data, ir, translations):
             page.set_rotation(0)
             original_links = page.get_links()
             nodes = [n for n in ir.nodes if n.page == p.number and n.translatable and n.id in translations]
+            page_nodes = [n for n in ir.nodes if n.page == p.number]
             placements = []
             for node in nodes:
                 target = translations[node.id]
@@ -31,7 +32,6 @@ def pdf_build(data, ir, translations):
                 if rect.is_empty or not page.rect.contains(rect):
                     report.findings.append(Finding(code="invalid_bounds", severity="critical", unit_id=node.id, detail="Zone source hors page"))
                     continue
-                page_nodes = [n for n in ir.nodes if n.page == node.page]
                 rect = placement_box(node, page, page_nodes)
                 markup, style = text_markup(node, target)
                 # A second translated block may already occupy otherwise blank space.
@@ -65,9 +65,13 @@ def pdf_build(data, ir, translations):
                         if spans:
                             delta = node.runs[0].origin[1] - spans[0]['origin'][1]
                             if 0 < delta < node.runs[0].size and rect.height - delta > node.runs[0].size:
-                                rect = rect + (0, delta, 0, 0)
+                                aligned = rect + (0, delta, 0, 0)
                                 scratch = probe.new_page(width=p.width, height=p.height)
-                                spare, scale = scratch.insert_htmlbox(rect, markup, css=style, scale_low=.85, rotate=rotation)
+                                aligned_spare, aligned_scale = scratch.insert_htmlbox(aligned, markup, css=style, scale_low=.85, rotate=rotation)
+                                # Alignment is cosmetic. Never discard an already
+                                # fitting French block by shrinking its usable box.
+                                if aligned_spare >= 0:
+                                    rect, spare, scale = aligned, aligned_spare, aligned_scale
                 finally:
                     probe.close()
                 if spare < 0:
@@ -205,3 +209,4 @@ def validate_pdf(source, target, report):
         if ratio > .001:
             report.findings.append(Finding(code="outside_text_visual_change", severity="critical", detail="Différence visuelle hors des zones textuelles"))
     return report
+

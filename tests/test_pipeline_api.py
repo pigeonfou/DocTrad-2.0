@@ -12,7 +12,7 @@ class FakeTranslator:
     count = 0
     def __init__(self, settings):
         pass
-    def translate(self, text):
+    def translate(self, text, context=None):
         FakeTranslator.count += 1
         return "Tension d’entrée 12 V", {"test": "not_real_inference"}
     def close(self):
@@ -200,3 +200,4 @@ def test_incomplete_older_contract_still_cannot_mix_machine_policies(settings, d
         job = s.get(Job, jid)
         assert job.status == "runtime_failed"
         assert job.error == "model_contract_changed_create_new_job"
+

@@ -26,7 +26,7 @@ ADR-004 : PostgreSQL durable, filesystem adressé par contenu, monolithe modulai
 
 ADR-005 : source immuable, révisions et contrats explicitement liés aux SHA. Une reprise sous un autre modèle doit créer un nouveau job.
 
-ADR-006 : contextes riches stockés mais template spécialisé strict. Ne pas prétendre que TranslateGemma traite automatiquement des instructions de glossaire arbitraires.
+ADR-006 : contexte de tableau borné pour les fragments courts ; contexte documentaire complet conservé pour révision. Les reprises de fidélité utilisent seulement des contraintes dérivées de la source. Ne pas prétendre que TranslateGemma traite automatiquement des instructions de glossaire arbitraires.
 
 ADR-007 : AGPL-3.0-or-later pour le projet avec PyMuPDF ; licences des poids distinctes, aucun poids ajouté au dépôt.
 
@@ -41,3 +41,4 @@ ADR-007 : AGPL-3.0-or-later pour le projet avec PyMuPDF ; licences des poids dis
 ## Validation avant remplacement de DocTrad actuel
 
 Première gate : test réel sur le runtime BC résident. Deuxième : référence TSM et AN/PRC-167 avec revue des régions signalées, valeur/cellule/ref critique = 0. Troisième : corpus varié et long, reprise/rollback/restauration. Coexistence maintenue jusqu’à satisfaction des gates. Les tests simulés de l’application ne franchissent pas à eux seuls ces gates.
+

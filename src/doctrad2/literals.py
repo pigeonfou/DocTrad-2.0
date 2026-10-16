@@ -2,13 +2,14 @@
 import hashlib
 import re
 from .quality import UNIT_PATTERN, IDENTIFIER, identifiers
+from .constraints import source_labels
 
 URL = re.compile(r'(?:https?://|www\.)[^\s<>]+')
 QUANTITY = re.compile(r'[-+−–]?\d+(?:[.,]\d+)?\s*[- ]?\s*(?:' + UNIT_PATTERN + r')(?:\^?[23]|[²³])?(?![A-Za-z])')
 DIMENSIONS = re.compile(r'(?:\d+(?:[.,]\d+)?\s*(?:[HWD]\s*)?[x×]\s*){1,2}\d+(?:[.,]\d+)?\s*(?:[HWD]\s*)?(?:' + UNIT_PATTERN + r')(?![A-Za-z])')
 
 
-def protected_spans(text):
+def protected_spans(text, required=()):
     chosen = []
     def add(match):
         if any(match.start() < end and match.end() > start for start, end in chosen):
@@ -16,6 +17,12 @@ def protected_spans(text):
         chosen.append((match.start(), match.end()))
     for pattern in (URL, DIMENSIONS):
         for match in pattern.finditer(text):
+            add(match)
+    for label in source_labels(text):
+        for match in re.finditer(re.escape(label), text):
+            add(match)
+    for word in required:
+        for match in re.finditer(r'\b' + re.escape(word) + r'\b', text):
             add(match)
     refs = identifiers(text)
     for match in IDENTIFIER.finditer(text):
@@ -28,8 +35,8 @@ def protected_spans(text):
     return sorted(chosen)
 
 
-def shield(text):
-    spans = protected_spans(text)
+def shield(text, required=()):
+    spans = protected_spans(text, required)
     prefix = 'dt' + hashlib.sha256(text.encode()).hexdigest()[:8]
     chunks, mapping, cursor = [], {}, 0
     for index, (start, end) in enumerate(spans):
@@ -57,3 +64,4 @@ def literal_only(text):
         cursor = end
     rest.append(text[cursor:])
     return bool(spans) and not any(c.isalnum() for c in ''.join(rest))
+

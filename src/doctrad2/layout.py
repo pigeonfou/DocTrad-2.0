@@ -5,7 +5,7 @@ import re
 import pymupdf as fitz
 from .text_policy import translation_source
 
-COMPOSITION_VERSION = "bounded-style-2.5"
+COMPOSITION_VERSION = "bounded-style-2.6"
 
 
 def source_style(node):
@@ -77,3 +77,4 @@ def placement_box(node, page, nodes):
         if obstacle.x0 < right and obstacle.x1 > original.x0 and obstacle.y0 >= original.y1 - .1:
             bottom = min(bottom, obstacle.y0 - 1)
     return fitz.Rect(original.x0, original.y0, right, max(original.y1, bottom))
+
