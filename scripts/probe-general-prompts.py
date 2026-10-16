@@ -6,7 +6,8 @@ from doctrad2.config import Settings
 from doctrad2.db import Database
 from doctrad2.gpu_lock import gpu_lock
 from doctrad2.inference import LlamaTranslator
-from doctrad2.prompts import render
+from doctrad2.quality import check_text
+from doctrad2.technical_prompt import render_technical
 
 RULES = ('Translate faithfully and concisely for technical documentation. Preserve the exact meaning, '
          'degree and hierarchy of all qualifiers, numbers, units, negations and formal labels. '
@@ -18,7 +19,33 @@ CASES = [
     ('dimensions', 'Dimensions: 2 H x 4 W x 6 D in (with battery).'),
     ('label', 'UHF SATCOM Waveforms'),
     ('degree', 'The pressure must never exceed 7 bar.'),
+    ('portable_channels', 'Multiple capabilities in a single, compact dual-channel manpack speeds deployment and reduces costs for dismount and vehicular missions'),
+    ('short_network', 'High-speed tactical MANETs expand real-time networking'),
+    ('technical_term', 'Spurious Suppression'),
+    ('formal_degree', 'High Assurances architecture allows Multiple Independent Levels of Security (MILS) up to TOP SECRET'),
+    ('unrelated_channels', 'The compact dual-channel oscilloscope supports simultaneous acquisition on both inputs.'),
+    ('acronyms', 'The external module supports ISR video and SATCOM, with in-field updates as mission needs evolve.'),
 ]
+
+FRENCH_RULES = ('Traduisez en français technique précis et concis. Conservez chaque information, '
+                'les sigles, valeurs, unités, négations et le degré exact des qualificatifs. '
+                'Ne développez pas les sigles. Ne convertissez pas les unités. '
+                'Répondez uniquement avec la traduction, intégralement en français.\nTexte anglais :\n')
+LATIN_GRAMMAR = r'root ::= [\t\n\r\x20-\x7E\u00A0-\u024F\u0300-\u03FF\u1E00-\u1EFF\u2000-\u23FF\u25A0-\u27BF]*'
+
+
+def generate(translator, prompt, grammar=None):
+    tokens = translator.request('/tokenize', {'content': prompt, 'add_special': False, 'parse_special': True})['tokens']
+    if len(tokens) > translator.contract.input_tokens:
+        raise ValueError('experiment_input_budget_exceeded')
+    payload = {'prompt': tokens, 'n_predict': translator.contract.output_tokens,
+               'temperature': 0, 'seed': 42, 'cache_prompt': True, 'stream': False}
+    if grammar:
+        payload['grammar'] = grammar
+    result = translator.request('/completion', payload)
+    if result.get('stopped_limit') or result.get('truncated') or result.get('stop_type') == 'limit':
+        raise ValueError('experiment_output_truncated')
+    return result['content'].strip(), {'input_tokens': len(tokens), 'timings': result.get('timings')}
 
 
 def main():
@@ -32,15 +59,17 @@ def main():
         try:
             translator.validate()
             for label, source in CASES:
-                official = render(source)
+                french = '<bos><start_of_turn>user\n' + FRENCH_RULES + source + '<end_of_turn>\n<start_of_turn>model\n'
                 prompts = {
-                    'official': official,
-                    'strict_official': official.replace('Produce only the French translation,', RULES + 'Produce only the French translation,', 1),
-                    'strict_direct': '<bos><start_of_turn>user\nTranslate the source from English to French. ' + RULES + '\nOutput only the French translation.\nSOURCE:\n' + source + '<end_of_turn>\n<start_of_turn>model\n',
+                    'strict_direct': (render_technical(source), None),
+                    'french_direct': (french, None),
+                    'latin_direct': (render_technical(source), LATIN_GRAMMAR),
+                    'french_latin': (french, LATIN_GRAMMAR),
                 }
-                for profile, prompt in prompts.items():
-                    target, info = translator.complete(prompt)
-                    results.append({'case': label, 'profile': profile, 'source': source, 'target': target, 'generation': info})
+                for profile, (prompt, grammar) in prompts.items():
+                    target, info = generate(translator, prompt, grammar)
+                    results.append({'case': label, 'profile': profile, 'source': source, 'target': target,
+                                    'findings': [f.model_dump() for f in check_text(source, target, label)], 'generation': info})
         finally:
             translator.close()
     destination = Path('/var/lib/doctrad2-reference/prompt-experiment.json')
@@ -51,3 +80,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
