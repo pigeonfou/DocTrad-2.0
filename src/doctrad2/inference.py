@@ -3,7 +3,7 @@ import time
 import httpx
 import ssl
 from .domain import ModelContract
-from .prompts import TEMPLATE_SHA, render as render_native
+from .prompts import TEMPLATE_SHA
 from .technical_prompt import render_technical, PROMPT_SHA
 from .text_policy import translation_source, sentence_parts, POLICY_VERSION
 from .quality import check_text
@@ -130,23 +130,6 @@ class LlamaTranslator:
                     issues = check_text(source, candidate['target'], '')
                     return (sum(f.severity == 'critical' for f in issues),
                             sum(f.severity == 'review' for f in issues), len(candidate['target']))
-                # Sampling the same prompt can reproduce the same defective candidate.
-                # Try the pinned native translation template once, on the unchanged
-                # source, before considering literal shielding. Never feed the bad
-                # candidate back as source or silently delete foreign characters.
-                best = min(candidates, key=rank)
-                foreign_script = any(f.code == 'unexpected_script' for f in check_text(source, best['target'], ''))
-                expanded_label = len(source) < 120 and len(best['target']) > max(30, len(source) * 1.6)
-                if foreign_script or expanded_label:
-                    native_prompt = render_native(source)
-                    if self.token_count(native_prompt) <= self.contract.input_tokens:
-                        native_raw, native_info = self.complete(native_prompt)
-                        native_target, repairs = restore_unambiguous_units(source, native_raw)
-                        candidates.append({'target': native_target, 'raw_target': native_raw, 'unit_repairs': repairs,
-                                           'generation': {**native_info, 'prompt_variant': 'pinned-native',
-                                                          'template_sha': TEMPLATE_SHA}})
-                    else:
-                        rejected.append({'reason': 'native_prompt_exceeds_input_budget'})
                 if min(rank(c)[0] for c in candidates) > 0:
                     masked, mapping = shield(source)
                     if mapping:
@@ -172,4 +155,3 @@ class LlamaTranslator:
                                       "context_policy": "technical_direct_complete_sentences;context_for_review",
                                       "translation_policy": POLICY_VERSION,
                                       "template_sha": TEMPLATE_SHA, "prompt_sha": PROMPT_SHA, "template_mode": "technical-direct"}
-
