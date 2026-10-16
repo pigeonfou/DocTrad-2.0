@@ -10,6 +10,7 @@ from .inference import LlamaTranslator
 from .text_policy import POLICY_VERSION
 from .quality import check_text
 from .reconstruction import build, validate_pdf
+from .literals import render_literal
 
 
 class LostLease(RuntimeError):
@@ -134,6 +135,14 @@ class Pipeline:
         with self.db.session() as s:
             self.owned(s, jid, token, lost)
             units = s.scalars(select(Unit).where(Unit.job_id == jid)).all()
+            for unit in units:
+                if unit.target == unit.source and unit.provenance.get('literal_only'):
+                    formatted = render_literal(unit.target)
+                    if formatted != unit.target:
+                        unit.provenance = {**unit.provenance, 'literal_rendering': {
+                            'version': 'math-ranges-1', 'source_target': unit.target}}
+                        unit.target, unit.version = formatted, unit.version + 1
+                        self.db.log(s, jid, 'literal_rendered', {'unit_id': unit.node_id, 'version': 'math-ranges-1'})
             translations = {u.node_id: u.target for u in units if u.target is not None}
         result, report = build(source, ir, translations)
         for unit in units:

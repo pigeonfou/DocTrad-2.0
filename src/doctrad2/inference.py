@@ -8,7 +8,7 @@ from .technical_prompt import render_technical, PROMPT_SHA
 from .text_policy import translation_source, sentence_parts, POLICY_VERSION
 from .quality import check_text, acronyms
 from .fidelity import restore_unambiguous_units
-from .literals import shield, restore, literal_only
+from .literals import shield, restore, literal_only, render_literal
 from .constraints import french_script_grammar
 
 
@@ -115,8 +115,10 @@ class LlamaTranslator:
             self.validate()
         source_text = translation_source(text)
         if literal_only(source_text):
-            return text, {"contract": self.contract.model_dump(), "translation_policy": POLICY_VERSION,
-                          "prompt_sha": PROMPT_SHA, "literal_only": True, "chunks": []}
+            target = render_literal(text)
+            return target, {"contract": self.contract.model_dump(), "translation_policy": POLICY_VERSION,
+                            "prompt_sha": PROMPT_SHA, "literal_only": True, "chunks": [],
+                            **({'literal_rendering': {'version': 'math-ranges-1', 'source_target': text}} if target != text else {})}
         bullet = re.match(r"^([>•›])\s+(?=[A-Za-z])", source_text)
         prefix = bullet.group() if bullet else ''
         if prefix:

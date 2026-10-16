@@ -1,4 +1,5 @@
 import time
+import pytest
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
 from doctrad2.api import create_app
@@ -6,6 +7,36 @@ from doctrad2.db import User, Document, Job, Unit
 from doctrad2.storage import Artifacts
 from doctrad2.pipeline import Pipeline
 from conftest import pdf
+
+
+@pytest.mark.parametrize('human', [False, True])
+def test_completed_literal_can_be_rendered_without_inference_or_overwriting_human_input(settings, database, human):
+    from doctrad2.extraction import extract
+    store = Artifacts(settings.root)
+    source = pdf('18 VDC to 35 VDC')
+    ir = extract(source, 'pdf')
+    contract = {'recorded': 'previous-qualified-generation'}
+    with database.session() as s:
+        document = Document(owner='alice', name='ranges.pdf', source_sha=store.put(source), format='pdf')
+        s.add(document)
+        s.flush()
+        job = Job(owner='alice', document_id=document.id, contract=contract, artifacts={'ir': store.json(ir.model_dump())})
+        s.add(job)
+        s.flush()
+        jid = job.id
+        for node in ir.nodes:
+            provenance = {'kind': 'human_correction', 'previous': {'literal_only': True}} if human else {'literal_only': True}
+            s.add(Unit(job_id=jid, node_id=node.id, source=node.text, target=node.text, provenance=provenance))
+    def no_inference(settings):
+        raise AssertionError('Completed candidate must not call the model')
+    assert Pipeline(settings, database, no_inference).work(once=True)
+    with database.session() as s:
+        unit = s.get(Unit, (jid, ir.nodes[0].id))
+        assert unit.source == '18 VDC to 35 VDC'
+        assert unit.target == ('18 VDC to 35 VDC' if human else '18 VDC - 35 VDC')
+        assert unit.version == (0 if human else 1)
+        assert s.get(Job, jid).contract == contract
+        assert s.get(Job, jid).status == 'ready_for_review'
 
 
 class FakeTranslator:

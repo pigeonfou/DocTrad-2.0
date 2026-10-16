@@ -161,3 +161,14 @@ def test_candidate_selection_never_prefers_numeric_damage_to_missing_labels(sett
     assert not any(f.code in {'numbers', 'value_units'} for f in check_text(source, target, 'n'))
     assert any(f.severity == 'critical' for f in check_text(source, target, 'n'))
     translator.close()
+
+
+@pytest.mark.parametrize('source,target', [('18 VDC to 35 VDC', '18 VDC - 35 VDC'),
+                                         ('-30 to 85 °C', '-30 - 85 °C'),
+                                         ('-30 to -10 °C', '-30 - -10 °C')])
+def test_literal_range_rendering_keeps_signed_values_and_units(source, target):
+    from doctrad2.literals import render_literal
+    assert render_literal(source) == target
+    assert not any(f.severity == 'critical' for f in check_text(source, target, 'n'))
+    assert render_literal('Operating range ' + source) == 'Operating range ' + source
+    assert render_literal('https://example.org/to/35V') == 'https://example.org/to/35V'

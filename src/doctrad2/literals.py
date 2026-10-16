@@ -68,3 +68,15 @@ def literal_only(text):
     rest.append(text[cursor:])
     return bool(spans) and not any(c.isalnum() for c in ''.join(rest))
 
+
+def render_literal(text):
+    """Render only a numeric relation, leaving values, units and URLs intact."""
+    if not literal_only(text):
+        return text
+    urls = [match.span() for match in URL.finditer(text)]
+    def relation(match):
+        if any(match.start() < end and match.end() > start for start, end in urls):
+            return match.group()
+        return re.sub(r'\s*\bto\b\s*', ' - ', match.group())
+    return RANGE.sub(relation, text)
+
