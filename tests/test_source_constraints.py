@@ -40,6 +40,9 @@ def test_unit_spelling_requires_same_value_and_unique_local_evidence():
         assert source_unit_spellings(ambiguous)[0] == ambiguous
     assert any(f.code == 'value_units' for f in check_text('8-ohm input and 8-ohn output', 'Entrée 8 V et sortie 8 V', 'n'))
     assert source_unit_spellings('4 in cable and 6-pin plug')[1] == []
+    assert source_unit_spellings('8-ohm input and -8-ohn output')[1] == []
+    assert not any(f.severity == 'critical' for f in check_text(source, 'Entrée 8-ohm et sortie 8-ohn', 'n'))
+    assert any(f.code == 'value_units' for f in check_text(source, 'Entrée 8 ohms et sortie 8', 'n'))
 
 
 def test_acronym_omissions_block_but_reordering_and_french_prose_are_allowed():

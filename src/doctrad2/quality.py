@@ -13,7 +13,7 @@ UNITS.update({"Ω": "Ω", "ohm": "Ω", "ohms": "Ω", "mile": "mile", "miles": "m
               "inch": "in", "inches": "in", "pouce": "in", "pouces": "in", "ft": "ft",
               "feet": "ft", "foot": "ft", "pied": "ft", "pieds": "ft", "lbs": "lb", "lb": "lb",
               "pound": "lb", "pounds": "lb", "livre": "lb", "livres": "lb"})
-QUALITY_VERSION = 'physical-quantities-2.7'
+QUALITY_VERSION = 'physical-quantities-2.8'
 UNITS.update({'watt': 'W', 'watts': 'W', 'volt': 'V', 'volts': 'V', 'ampere': 'A', 'amperes': 'A',
               'ampère': 'A', 'ampères': 'A', 'bar': 'bar', 'bars': 'bar', 'Pa': 'Pa', 'kPa': 'kPa',
               'MPa': 'MPa', 'mbar': 'mbar', 'psi': 'psi', '°F': '°F', 'K': 'K', 'dBc': 'dBc',
@@ -110,19 +110,21 @@ def source_unit_spellings(text):
     This never changes the uploaded source. A matching translation still requires
     human review; absent or competing source evidence leaves the critical check intact.
     """
-    pattern = re.compile(r'(?P<value>\d+(?:[.,]\d+)?)\s*[- ]\s*(?P<word>[a-z]{3,})(?![A-Za-z])')
+    pattern = re.compile(r'(?P<value>[-+−–]?\d+(?:[.,]\d+)?)\s*[- ]\s*(?P<word>[a-z]{3,})(?![A-Za-z])')
+    def numeric(value):
+        return Decimal(value.replace(',', '.').replace('−', '-').replace('–', '-'))
     matches = list(pattern.finditer(text))
     known = {}
     for match in matches:
         if match['word'] in UNITS:
-            value = Decimal(match['value'].replace(',', '.'))
+            value = numeric(match['value'])
             known.setdefault(value, set()).add(match['word'])
     notes = []
     def replace(match):
         word = match['word']
         if word in UNITS:
             return match.group()
-        alternatives = [unit for unit in known.get(Decimal(match['value'].replace(',', '.')), ())
+        alternatives = [unit for unit in known.get(numeric(match['value']), ())
                         if len(unit) == len(word) and sum(a != b for a, b in zip(unit, word)) == 1]
         if len(alternatives) != 1:
             return match.group()
@@ -149,7 +151,10 @@ def check_text(source, target, unit_id, glossary=None):
     if numbers(source) != numbers(target):
         add("numbers", "critical", "Valeurs numériques ajoutées, omises ou modifiées")
     qualified_source, unit_notes = source_unit_spellings(source)
-    if measured_values(qualified_source) != measured_values(target):
+    raw_preserved = (measured_values(source) == measured_values(target)
+                     and all(len(re.findall(r'\b' + re.escape(note['source']) + r'\b', target))
+                             >= len(re.findall(r'\b' + re.escape(note['source']) + r'\b', source)) for note in unit_notes))
+    if not raw_preserved and measured_values(qualified_source) != measured_values(target):
         add("value_units", "critical", "Association valeur/unité modifiée")
     for note in unit_notes:
         add('source_unit_spelling', 'review',

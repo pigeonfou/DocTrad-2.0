@@ -43,7 +43,7 @@ def run_reference(settings, relative, expected_sha, label, output_name, export_s
             db.log(s, jid, 'reference_queued', {'source_sha': source_sha})
     with db.session() as s:
         job = s.get(Job, jid)
-        if job.status == 'quality_blocked' and 'report' in job.artifacts:
+        if job.status in {'quality_blocked', 'ready_for_review'} and 'report' in job.artifacts:
             prior = store.read_json(job.artifacts['report']).get('metrics', {})
             if prior.get('composition_version') != COMPOSITION_VERSION or prior.get('quality_version') != QUALITY_VERSION:
                 job.status, job.error, job.revision = 'queued', None, job.revision + 1
@@ -116,3 +116,4 @@ def main():
 if __name__ == '__main__':
     os.umask(0o027)
     main()
+

@@ -20,7 +20,7 @@ Une restauration d’unité n’est permise que si les nombres sont inchangés e
 
 Les contrôles distinguent les intervalles, signes, versions, descriptions numériques, références, puissances d’unités et unités partagées des dimensions. Ils prennent en compte les annotations d’axes. Une écriture étrangère ajoutée, un sigle omis dans la prose ou un libellé formel remplacé sont critiques. La ponctuation ajoutée entre mots d’un libellé ne constitue pas à elle seule un changement de sens. Les contrôles numériques ne certifient pas le sens d’un texte.
 
-Une graphie d’unité inconnue ne peut être rapprochée d’une graphie source connue que si elles diffèrent d’une seule lettre, ont la même longueur et accompagnent la même valeur dans le même passage. Une correspondance unique est nécessaire. La source reste intacte et le rapprochement produit une alerte de révision humaine ; une mesure différente reste bloquante. Sans preuve locale, aucun rapprochement n’est effectué.
+Une graphie d’unité inconnue ne peut être rapprochée d’une graphie source connue que si elles diffèrent d’une seule lettre, ont la même longueur et accompagnent la même valeur dans le même passage. Une correspondance unique est nécessaire. La source reste intacte et le rapprochement produit une alerte de révision humaine ; une mesure différente reste bloquante. La conservation de la graphie source ambiguë reste possible avec cette même alerte. Sans preuve locale, aucun rapprochement n’est effectué.
 
 Les erreurs de transport temporaires disposent d’une reprise bornée laissant le temps au service BC250 de redémarrer. Les erreurs d’authentification ou de protocole ne sont pas assimilées à ces indisponibilités. Les unités déjà enregistrées sont conservées.
 
