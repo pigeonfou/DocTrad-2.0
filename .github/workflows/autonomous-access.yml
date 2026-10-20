@@ -10,7 +10,7 @@ concurrency:
 jobs:
   diagnose:
     runs-on: [self-hosted, Linux, X64, doctrad2-deploy]
-    timeout-minutes: 8
+    timeout-minutes: 30
     steps:
       - name: Configure dedicated SSH client with pinned host identity
         shell: bash
@@ -24,71 +24,25 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - name: Test rotary metadata correction on synthetic public page
+      - name: Build isolated official Unlimited OCR runtime
         shell: bash
         run: |
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s' <<'REMOTE_SCRIPT'
           set -euo pipefail
-          test_dir=$(mktemp -d /home/bc/doctrad2-ocr-iteration-XXXXXX)
-          export TEST_DIR="$test_dir"
-          python3 - <<'PY'
-          import os,struct,zlib
-          from pathlib import Path
-          glyphs={
-          'A':['01110','10001','10001','11111','10001','10001','10001'],
-          'C':['01111','10000','10000','10000','10000','10000','01111'],
-          'D':['11110','10001','10001','10001','10001','10001','11110'],
-          'E':['11111','10000','10000','11110','10000','10000','11111'],
-          'G':['01111','10000','10000','10111','10001','10001','01111'],
-          'I':['11111','00100','00100','00100','00100','00100','11111'],
-          'L':['10000','10000','10000','10000','10000','10000','11111'],
-          'M':['10001','11011','10101','10101','10001','10001','10001'],
-          'N':['10001','11001','10101','10011','10001','10001','10001'],
-          'O':['01110','10001','10001','10001','10001','10001','01110'],
-          'P':['11110','10001','10001','11110','10000','10000','10000'],
-          'R':['11110','10001','10001','11110','10100','10010','10001'],
-          'S':['01111','10000','10000','01110','00001','00001','11110'],
-          'T':['11111','00100','00100','00100','00100','00100','00100'],
-          'U':['10001','10001','10001','10001','10001','10001','01110'],
-          'V':['10001','10001','10001','10001','10001','01010','00100'],
-          '0':['01110','10001','10011','10101','11001','10001','01110'],
-          '1':['00100','01100','00100','00100','00100','00100','01110'],
-          '2':['01110','10001','00001','00010','00100','01000','11111'],
-          '5':['11111','10000','10000','11110','00001','00001','11110'],
-          '-':['00000','00000','00000','11111','00000','00000','00000'],
-          ':':['00000','00100','00100','00000','00100','00100','00000'],
-          ' ':['00000']*7}
-          lines=['DOCTRAD TEST','INPUT VOLTAGE: 12 V','TEMPERATURE: -20 TO 55 C']
-          w,h,scale=1200,480,6
-          pixels=bytearray([255])*(w*h)
-          for li,line in enumerate(lines):
-              for ci,ch in enumerate(line):
-                  for row,bits in enumerate(glyphs[ch]):
-                      for col,bit in enumerate(bits):
-                          if bit=='1':
-                              for yy in range(scale):
-                                  y=60+li*120+row*scale+yy
-                                  x=70+ci*6*scale+col*scale
-                                  pixels[y*w+x:y*w+x+scale]=bytes(scale)
-          def chunk(t,data):return struct.pack('>I',len(data))+t+data+struct.pack('>I',zlib.crc32(t+data)&0xffffffff)
-          raw=b''.join(b'\0'+pixels[y*w:(y+1)*w] for y in range(h))
-          png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,0,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
-          Path(os.environ['TEST_DIR'],'synthetic.png').write_bytes(png)
-          print('PUBLIC_SYNTHETIC_SOURCE',lines)
-          PY
-          trap 'sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service' EXIT
-          sudo -n /usr/bin/systemctl stop doctrad2-bc250-runtime.service
-          ocr_dir=/home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661
-          set +e
-          timeout --foreground --kill-after=10s 180s /home/bc/.unsloth/llama.cpp/build-doctrad2-ocr/bin/llama-mtmd-cli \
-            -m "$ocr_dir/Unlimited-OCR-BF16.gguf" --mmproj "$ocr_dir/mmproj-Unlimited-OCR-F16.gguf" \
-            --image "$test_dir/synthetic.png" -p "Free OCR." --no-jinja --chat-template deepseek-ocr \
-            --override-kv deepseek2-ocr.rope.dimension_count=int:128 \
-            --device Vulkan0 --n-gpu-layers 99 --flash-attn off --no-warmup --temp 0 --repeat-penalty 1.0 -c 4096 -n 128 \
-            </dev/null >"$test_dir/rope128.log" 2>&1
-          status=$?
-          set -e
-          printf 'OCR_EXIT=%s\nOCR_DIR=%s\n' "$status" "$test_dir"
-          tail -n 24 "$test_dir/rope128.log"
-          exit "$status"
+          revision=1725dcab4baac46c4eb197afc96af7b57a81882a
+          source_root=/home/bc/.local/share/doctrad2/ocr-runtime
+          source_dir="$source_root/$revision"
+          mkdir -p "$source_root"
+          if [[ ! -f "$source_dir/CMakeLists.txt" ]]; then
+            archive=$(mktemp "$source_root/source-XXXXXX.tar.gz")
+            curl -fL --retry 2 --connect-timeout 20 --max-time 180 "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/$revision" -o "$archive"
+            tar -xzf "$archive" -C "$source_root"
+            mv "$source_root/llama.cpp-$revision" "$source_dir"
+            rm -f "$archive"
+          fi
+          printf 'OCR_OFFICIAL_SOURCE=%s\n' "$revision"
+          cmake -S "$source_dir" -B "$source_dir/build-vulkan" -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF
+          cmake --build "$source_dir/build-vulkan" --target llama-mtmd-cli --parallel 2
+          "$source_dir/build-vulkan/bin/llama-mtmd-cli" --version
+          printf 'OFFICIAL_OCR_BUILD_READY=%s\n' "$source_dir/build-vulkan/bin/llama-mtmd-cli"
           REMOTE_SCRIPT
