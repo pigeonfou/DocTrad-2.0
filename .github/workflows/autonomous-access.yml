@@ -30,7 +30,7 @@ jobs:
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s' <<'REMOTE_SCRIPT'
           set -euo pipefail
           revision=1725dcab4baac46c4eb197afc96af7b57a81882a
-          source_root=/home/bc/.local/share/doctrad2/ocr-runtime
+          source_root=/home/bc/.cache/doctrad2/ocr-runtime
           source_dir="$source_root/$revision"
           mkdir -p "$source_root"
           if [[ ! -f "$source_dir/CMakeLists.txt" ]]; then
