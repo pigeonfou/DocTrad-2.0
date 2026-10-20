@@ -46,7 +46,7 @@ def accuracy(source, target):
             "numbers_preserved": numbers(left) == numbers(right)}
 
 
-def prepare(directory, source_pdf):
+def prepare(directory, source_pdf, min_long_edge=0):
     import pymupdf as fitz
     if hashlib.sha256(source_pdf.read_bytes()).hexdigest() != SOURCE_SHA:
         raise SystemExit("Only the pinned public reference is permitted")
@@ -72,7 +72,16 @@ def prepare(directory, source_pdf):
             name = f"technical-reference-{page.number + 1}.png"
             page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False).save(directory / name)
             fixtures.append({"name": f"technical-reference-{page.number + 1}",
-                             "image": name, "source": page.get_text(sort=True)})
+                             "image": name, "source": page.get_text(sort=False)})
+    for fixture in fixtures:
+        path = directory / fixture["image"]
+        pixmap = fitz.Pixmap(path)
+        fixture["original_size"] = [pixmap.width, pixmap.height]
+        scale = max(1.0, min_long_edge / max(pixmap.width, pixmap.height))
+        if scale > 1:
+            pixmap = fitz.Pixmap(pixmap, round(pixmap.width * scale), round(pixmap.height * scale), None)
+            pixmap.save(path)
+        fixture["input_size"] = [pixmap.width, pixmap.height]
     (directory / "fixtures.json").write_text(json.dumps(fixtures, ensure_ascii=False, indent=2))
     print("PUBLIC_OCR_FIXTURES=" + json.dumps(fixtures, ensure_ascii=False))
 
@@ -143,13 +152,14 @@ def main():
     parser.add_argument("--binary", type=Path)
     parser.add_argument("--model", type=Path)
     parser.add_argument("--projector", type=Path)
+    parser.add_argument("--min-long-edge", type=int, default=0)
     parser.add_argument("--context", type=int, default=8192)
     parser.add_argument("--predict", type=int, default=2400)
     args = parser.parse_args()
     if args.prepare:
         if not args.source_pdf:
             parser.error("--source-pdf is required for fixture preparation")
-        prepare(args.directory, args.source_pdf)
+        prepare(args.directory, args.source_pdf, args.min_long_edge)
         return 0
     for key in ("binary", "model", "projector"):
         if getattr(args, key) is None:
