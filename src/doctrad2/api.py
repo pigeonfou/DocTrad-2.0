@@ -83,6 +83,12 @@ def create_app(settings=None, database=None):
             s.execute(select(User.name).limit(1))
         return {"status": "ok", "version": "2.0.0", "inference": "BC250/Vulkan/llama-server", "quality": "not-certified-by-health", "llm_configured": len(settings.model_sha) == 64 and len(settings.runtime_sha) == 64}
 
+    @app.get("/v2/models")
+    def models(request: Request):
+        owner(request)
+        from .models import catalog
+        return catalog(settings)
+
     @app.get("/")
     def index():
         return FileResponse(Path(__file__).parent / "static" / "index.html")
@@ -300,3 +306,4 @@ def create_app(settings=None, database=None):
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})
 
     return app
+
