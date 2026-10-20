@@ -23,7 +23,7 @@ Exécution 39516533060 : OCR puis véritable adaptateur technique TranslateGemma
 
 Exécution 39516672666 : fiche AN/PRC deux pages à 144 dpi. Les deux générations terminent normalement (31,805 et 51,854 secondes), mais le contrôle strict échoue. Une petite mention dans une photographie et un tampon tourné sont omis. La deuxième page produit des tableaux HTML. Les scores bruts sont affectés par ces balises, l'ordre de lecture, les césures de la référence PDF et des textes d'images absents de sa couche native.
 
-Exécution 39517254256 : comparaison à 288 dpi avec extraction du texte des cellules HTML. Résultat à consulter dans les journaux de cette exécution ; ne pas présumer sa réussite.
+Exécution 39517254256 : comparaison à 288 dpi avec extraction du texte des cellules HTML. Les deux générations terminent (31,993 et 51,250 secondes), mais le contrôle strict échoue encore : les petites mentions omises ne réapparaissent pas. Après extraction des cellules, la deuxième page atteint 97,13 % de rappel lexical et 97,31 % de précision par rapport à la couche PDF native ; ce comparatif reste partiel et affecté par les césures et les textes d'images. Le service de traduction est revenu actif et son endpoint /health répond ok.
 
 ## Utilisation et limites
 
