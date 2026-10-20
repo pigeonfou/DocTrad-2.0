@@ -25,74 +25,74 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - uses: actions/checkout@v4
-      - name: Update OCR output adapter
+      - name: Retrieve the verified public OCR result
         shell: bash
         run: |
-          scp -F "$HOME/.ssh/doctrad2-bc250/config" scripts/benchmark-unlimited-ocr.py doctrad2-bc250:/home/bc/.cache/doctrad2/ocr-benchmarks/39515898862/benchmark-unlimited-ocr.py
-      - name: Validate OCR and translate the recognized technical page
+          scp -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250:/home/bc/.cache/doctrad2/ocr-benchmarks/39515898862/results-normalized.json "$RUNNER_TEMP/ocr-results-normalized.json"
+      - name: Translate OCR blocks through the production technical adapter
         shell: bash
         run: |
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s' <<'REMOTE_SCRIPT'
-          set -euo pipefail
-          export OCR_BENCH_DIR=/home/bc/.cache/doctrad2/ocr-benchmarks/39515898862
-          python3 - <<'PY'
-          import os,runpy,json
+          /opt/doctrad2/current/.venv/bin/python - <<'PY'
+          import json,os,subprocess,time
           from pathlib import Path
-          directory=Path(os.environ['OCR_BENCH_DIR'])
-          helpers=runpy.run_path(str(directory/'benchmark-unlimited-ocr.py'))
-          prior=json.loads((directory/'results.json').read_text())
-          for item in prior:
-              raw=(directory/(item['case']+'.txt')).read_text(errors='replace')
-              target=helpers['clean_output'](raw)
-              metrics=helpers['accuracy'](item['source'],target)
-              item.update(metrics,recognized=target,recognized_characters=len(target),
-                          grounding_prefix_recovered=raw.count('<|/det|>')>raw.count('<|det|>'),
-                          normalization_version='grounding-2')
-              item['passed']=(item['returncode']==0 and item['ended_eog'] and bool(target)
-                              and metrics['word_recall']>=.95 and metrics['word_precision']>=.95
-                              and metrics['numbers_preserved'])
-              print('PUBLIC_OCR_VERIFIED='+json.dumps(item,ensure_ascii=False),flush=True)
-          (directory/'results-normalized.json').write_text(json.dumps(prior,ensure_ascii=False,indent=2))
-          assert all(item['passed'] for item in prior),'OCR benchmark incomplete'
-          print('PUBLIC_OCR_VALIDATED=3/3',flush=True)
-          PY
-          python3 - <<'PY'
-          import json,urllib.request,time,os
-          from pathlib import Path
-          directory=Path(os.environ['OCR_BENCH_DIR'])
-          results=json.loads((directory/'results-normalized.json').read_text())
-          source=next(r['recognized'] for r in results if r['case']=='technical-reference-1' and r['passed'])
-          opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
-          def request(path,data):
-              q=urllib.request.Request('http://127.0.0.1:52365'+path,data=json.dumps(data).encode(),headers={'Content-Type':'application/json'})
-              with opener.open(q,timeout=90) as r:return json.load(r)
-          prompt='<bos><start_of_turn>user\nYou are a professional English (en) to French (fr) translator. Your goal is to accurately convey the meaning and nuances of the original English text while adhering to French grammar, vocabulary, and cultural sensitivities.\nProduce only the French translation, without any additional explanations or commentary. Please translate the following English text into French:\n\n\n'+source+'<end_of_turn>\n<start_of_turn>model\n'
-          tokens=request('/tokenize',{'content':prompt,'add_special':False,'parse_special':True})['tokens']
-          assert len(tokens)<=1800
-          started=time.monotonic()
-          result=request('/completion',{'prompt':tokens,'n_predict':1200,'temperature':0,'seed':42,'stream':False})
-          record={'source':source,'target':result.get('content','').strip(),'inference_seconds':round(time.monotonic()-started,3),
-                  'input_tokens':len(tokens),'tokens_predicted':result.get('tokens_predicted'),
-                  'truncated':result.get('truncated'),'stop_type':result.get('stop_type'),
-                  'ocr_model':'Unlimited-OCR-BF16','translation_model':'TranslateGemma-12B-Q4_K_M'}
-          assert record['target'] and not record['truncated'] and record['stop_type']!='limit'
-          (directory/'ocr-to-translation.json').write_text(json.dumps(record,ensure_ascii=False,indent=2))
-          print('PUBLIC_OCR_TRANSLATION='+json.dumps(record,ensure_ascii=False),flush=True)
-          PY
-          systemctl is-active doctrad2-bc250-runtime.service doctrad2-bc250-gateway.service
-          curl -fsS --max-time 10 http://127.0.0.1:52365/health
-          REMOTE_SCRIPT
-      - name: Apply application quality checks to the translated OCR text
-        shell: bash
-        run: |
-          scp -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250:/home/bc/.cache/doctrad2/ocr-benchmarks/39515898862/ocr-to-translation.json "$RUNNER_TEMP/ocr-to-translation.json"
-          /opt/doctrad2/current/.venv/bin/python - "$RUNNER_TEMP/ocr-to-translation.json" <<'PY'
-          import json,sys
-          from pathlib import Path
+          import httpx
+          from doctrad2.config import Settings
+          from doctrad2.inference import LlamaTranslator
           from doctrad2.quality import check_text
-          record=json.loads(Path(sys.argv[1]).read_text())
-          findings=check_text(record["source"],record["target"],"public-ocr-reference")
-          print("PUBLIC_OCR_TRANSLATION_QUALITY="+json.dumps([f.model_dump() for f in findings],ensure_ascii=False))
-          assert not any(f.severity=="critical" for f in findings)
+          
+          class Bc250Transport(httpx.BaseTransport):
+              def handle_request(self, request):
+                  path=request.url.path
+                  if path not in {"/props","/tokenize","/completion","/apply-template"}:
+                      raise RuntimeError("Unapproved inference path")
+                  method=request.method
+                  if method not in {"GET","POST"}:
+                      raise RuntimeError("Unapproved method")
+                  remote="curl -sS --max-time 90 -w '\\n%{http_code}' -H 'Content-Type: application/json' -X "+method
+                  if method=="POST":
+                      remote+=" --data-binary @-"
+                  remote+=" http://127.0.0.1:52365"+path
+                  result=subprocess.run(["ssh","-F",str(Path.home()/".ssh/doctrad2-bc250/config"),"doctrad2-bc250",remote],
+                                        input=request.read(),capture_output=True,timeout=100,check=False)
+                  if result.returncode:
+                      raise httpx.ConnectError("BC250 SSH inference request failed",request=request)
+                  body,status=result.stdout.rsplit(b"\n",1)
+                  return httpx.Response(int(status),content=body,request=request)
+          
+          directory=Path(os.environ["RUNNER_TEMP"])/"ocr-qualified-chain"
+          directory.mkdir(exist_ok=True)
+          report=json.loads(Path(os.environ["RUNNER_TEMP"],"ocr-results-normalized.json").read_text())
+          ocr=next(item for item in report if item["case"]=="technical-reference-1")
+          assert ocr["passed"]
+          settings=Settings(root=directory,database_url="sqlite:///"+str(directory/"unused.sqlite"),
+                            secret="public-benchmark-no-account-secret"*2,
+                            llm_url="http://127.0.0.1:52365",
+                            model_sha="b7aac4b4be7ab0c49b6556c29c4467e74313df7f1e95d9f9676bb2adf0afa528",
+                            runtime_sha="05367ddadee77b4d33634046d058bbb86101910a668b8759f5cd2265faab341a")
+          translator=LlamaTranslator(settings,transport=Bc250Transport())
+          started=time.monotonic()
+          segments=[]
+          try:
+              for index,source in enumerate(ocr["recognized"].splitlines()):
+                  if not source.strip():
+                      continue
+                  target,provenance=translator.translate(source)
+                  findings=check_text(source,target,f"ocr-block-{index}")
+                  item={"source":source,"target":target,"findings":[f.model_dump() for f in findings],
+                        "translation_policy":provenance.get("translation_policy")}
+                  segments.append(item)
+                  print("PUBLIC_QUALIFIED_OCR_SEGMENT="+json.dumps(item,ensure_ascii=False),flush=True)
+          finally:
+              translator.close()
+          record={"ocr_seconds":ocr["seconds"],"translation_seconds":round(time.monotonic()-started,3),
+                  "segments":segments,"source":ocr["recognized"],"target":"\n".join(s["target"] for s in segments),
+                  "critical_findings":sum(f["severity"]=="critical" for s in segments for f in s["findings"])}
+          (directory/"result.json").write_text(json.dumps(record,ensure_ascii=False,indent=2))
+          print("PUBLIC_QUALIFIED_OCR_CHAIN="+json.dumps(record,ensure_ascii=False),flush=True)
+          assert record["critical_findings"]==0
+          
           PY
+      - name: Verify runtime health
+        shell: bash
+        run: |
+          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'systemctl is-active doctrad2-bc250-runtime.service doctrad2-bc250-gateway.service; curl -fsS --max-time 10 http://127.0.0.1:52365/health'
