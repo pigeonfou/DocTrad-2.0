@@ -2,6 +2,7 @@ name: DocTrad2 autonomous access diagnostic
 on:
   push:
     branches: [diagnostic/autonomous-bc250-20261021]
+    paths: [.github/workflows/autonomous-access.yml]
 permissions:
   contents: read
 concurrency:
@@ -10,7 +11,7 @@ concurrency:
 jobs:
   diagnose:
     runs-on: [self-hosted, Linux, X64, doctrad2-deploy]
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - name: Configure dedicated SSH client with pinned host identity
         shell: bash
@@ -24,25 +25,69 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - name: Build isolated official Unlimited OCR runtime
+      - name: Compare OCR clients and translate recognized source
         shell: bash
         run: |
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s' <<'REMOTE_SCRIPT'
           set -euo pipefail
-          revision=1725dcab4baac46c4eb197afc96af7b57a81882a
-          source_root=/home/bc/.cache/doctrad2/ocr-runtime
-          source_dir="$source_root/$revision"
-          mkdir -p "$source_root"
-          if [[ ! -f "$source_dir/CMakeLists.txt" ]]; then
-            archive=$(mktemp "$source_root/source-XXXXXX.tar.gz")
-            curl -fL --retry 2 --connect-timeout 20 --max-time 180 "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/$revision" -o "$archive"
-            tar -xzf "$archive" -C "$source_root"
-            mv "$source_root/llama.cpp-$revision" "$source_dir"
-            rm -f "$archive"
-          fi
-          printf 'OCR_OFFICIAL_SOURCE=%s\n' "$revision"
-          cmake -S "$source_dir" -B "$source_dir/build-vulkan" -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF
-          cmake --build "$source_dir/build-vulkan" --target llama-mtmd-cli --parallel 2
-          "$source_dir/build-vulkan/bin/llama-mtmd-cli" --version
-          printf 'OFFICIAL_OCR_BUILD_READY=%s\n' "$source_dir/build-vulkan/bin/llama-mtmd-cli"
+          official=/home/bc/.cache/doctrad2/ocr-runtime/1725dcab4baac46c4eb197afc96af7b57a81882a/build-vulkan/bin
+          test_dir=/home/bc/doctrad2-ocr-iteration-DaNT8a
+          export OFFICIAL_BIN="$official" TEST_DIR="$test_dir"
+          test -x "$official/llama-mtmd-cli"
+          trap 'sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service' EXIT
+          sudo -n /usr/bin/systemctl stop doctrad2-bc250-runtime.service
+          python3 - <<'PY'
+          import json,os,subprocess,time,re
+          from pathlib import Path
+          out=Path(os.environ['TEST_DIR'])
+          model_root=Path('/home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661')
+          cases=[
+           ('bundled-document-parsing',Path('/home/bc/.unsloth/llama.cpp/build-doctrad2-ocr/bin/llama-mtmd-cli'),[]),
+           ('official-document-parsing',Path(os.environ['OFFICIAL_BIN'])/'llama-mtmd-cli',['--override-kv','deepseek2-ocr.attention.sliding_window=int:128','--cache-type-v','f32'])]
+          results=[]
+          for label,binary,extra in cases:
+              command=[str(binary),'-m',str(model_root/'Unlimited-OCR-BF16.gguf'),'--mmproj',str(model_root/'mmproj-Unlimited-OCR-F16.gguf'),'--image',str(out/'synthetic.png'),'-p','document parsing.','--chat-template','deepseek-ocr','--no-jinja','--device','Vulkan0','--n-gpu-layers','99','--flash-attn','off','--no-warmup','--temp','0','--repeat-penalty','1.0','-c','4096','-n','256']+extra
+              env=os.environ.copy()
+              if label.startswith('official'):env['LD_LIBRARY_PATH']=str(binary.parent)
+              started=time.monotonic()
+              with (out/(label+'.txt')).open('wb') as stdout,(out/(label+'.log')).open('wb') as stderr:
+                  try:
+                      result=subprocess.run(command,stdin=subprocess.DEVNULL,stdout=stdout,stderr=stderr,timeout=240,env=env,start_new_session=True)
+                      code=result.returncode
+                  except subprocess.TimeoutExpired:code=124
+              text=(out/(label+'.txt')).read_text(errors='replace')
+              clean=re.sub(r'<\|det\|>.*?<\|/det\|>','',text,flags=re.S)
+              clean=re.sub(r'<\|/?(?:ref|grounding)\|>','',clean)
+              clean=clean.replace('<｜end▁of▁sentence｜>','').replace('<｜begin▁of▁sentence｜>','').strip()
+              normalized=' '.join(clean.upper().replace('−','-').split())
+              passed=code==0 and all(s in normalized for s in ('INPUT VOLTAGE','12 V','TEMPERATURE','-20','55'))
+              item={'case':label,'returncode':code,'seconds':round(time.monotonic()-started,2),'text':text,'source_values_preserved':passed}
+              print('PUBLIC_OCR_RESULT='+json.dumps(item,ensure_ascii=False),flush=True)
+              if code:print((out/(label+'.log')).read_text(errors='replace')[-3000:],flush=True)
+              if label.startswith('official') and passed:(out/'recognized.txt').write_text(clean)
+              results.append(item)
+          (out/'comparison.json').write_text(json.dumps(results,ensure_ascii=False,indent=2))
+          if not results[-1]['source_values_preserved']:raise SystemExit('Official OCR not validated')
+          PY
+          sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service
+          for attempt in $(seq 1 90); do
+            if curl -fsS --max-time 2 http://127.0.0.1:52365/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          python3 - <<'PY'
+          import json,urllib.request,os,time
+          from pathlib import Path
+          opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+          def request(path,data):
+              q=urllib.request.Request('http://127.0.0.1:52365'+path,data=json.dumps(data).encode(),headers={'Content-Type':'application/json'})
+              with opener.open(q,timeout=90) as r:return json.load(r)
+          source=(Path(os.environ['TEST_DIR'])/'recognized.txt').read_text()
+          prompt='<bos><start_of_turn>user\nYou are a professional English (en) to French (fr) translator. Your goal is to accurately convey the meaning and nuances of the original English text while adhering to French grammar, vocabulary, and cultural sensitivities.\nProduce only the French translation, without any additional explanations or commentary. Please translate the following English text into French:\n\n\n'+source+'<end_of_turn>\n<start_of_turn>model\n'
+          tokens=request('/tokenize',{'content':prompt,'parse_special':True,'add_special':False})['tokens']
+          r=request('/completion',{'prompt':tokens,'n_predict':256,'temperature':0,'stream':False,'seed':42})
+          result={'source':source,'target':r.get('content'),'truncated':r.get('truncated'),'stop_type':r.get('stop_type')}
+          print('PUBLIC_OCR_TRANSLATION='+json.dumps(result,ensure_ascii=False))
+          assert r.get('content','').strip() and not r.get('truncated') and r.get('stop_type')!='limit'
+          (Path(os.environ['TEST_DIR'])/'translation.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+          PY
           REMOTE_SCRIPT
