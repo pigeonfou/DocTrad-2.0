@@ -31,7 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           fixture_dir="$RUNNER_TEMP/unlimited-ocr-$GITHUB_RUN_ID"
-          /opt/doctrad2/current/.venv/bin/python scripts/benchmark-unlimited-ocr.py --prepare --reference-only --min-long-edge 1200 --directory "$fixture_dir" --source-pdf /opt/doctrad2/current/benchmarks/AN_PRC_167_source.pdf
+          /opt/doctrad2/current/.venv/bin/python scripts/benchmark-unlimited-ocr.py --prepare --render-scale 4 --reference-only --min-long-edge 1200 --directory "$fixture_dir" --source-pdf /opt/doctrad2/current/benchmarks/AN_PRC_167_source.pdf
           tar -C "$fixture_dir" -czf "$RUNNER_TEMP/ocr-fixtures-$GITHUB_RUN_ID.tar.gz" .
           remote_dir="/home/bc/.cache/doctrad2/ocr-benchmarks/$GITHUB_RUN_ID"
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "mkdir -p '$remote_dir'"
