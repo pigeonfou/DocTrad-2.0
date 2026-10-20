@@ -24,62 +24,34 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - name: Inspect metadata and verify live translation
+      - name: Compare decoder against original model
         shell: bash
         run: |
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s' <<'REMOTE_SCRIPT'
           set -euo pipefail
           cd /home/bc/.unsloth/llama.cpp
-          printf '\n=== Multimodal input framing ===\n'
-          sed -n '890,908p' tools/mtmd/mtmd.cpp
-          sed -n '1200,1325p' tools/mtmd/mtmd.cpp
-          printf '\n=== Local GGUF metadata ===\n'
+          printf '\n=== CLI metadata override support ===\n'
+          ./build-doctrad2-ocr/bin/llama-mtmd-cli --help 2>&1 | grep -A8 -B2 'override-kv'
+          printf '\n=== OCR graph and converter ===\n'
+          grep -n -A100 'llama_model_deepseek2ocr::graph::graph' src/models/deepseek2* || true
+          grep -n -A110 -B5 'struct llama_model_deepseek2ocr' src/models/models.h || true
+          grep -n -A20 -B10 'is_ocr' conversion/deepseek.py | head -130
+          printf '\n=== Original model attention implementation ===\n'
           python3 - <<'PY'
-          import struct,json
+          import urllib.request
           from pathlib import Path
-          base=Path('/home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661')
-          for name in ('Unlimited-OCR-BF16.gguf','mmproj-Unlimited-OCR-F16.gguf'):
-              with (base/name).open('rb') as f:
-                  def num(fmt): return struct.unpack('<'+fmt,f.read(struct.calcsize('<'+fmt)))[0]
-                  def string(): return f.read(num('Q')).decode('utf8',errors='replace')
-                  def value(t):
-                      if t==8:return string()
-                      if t==9:
-                          et,n=num('I'),num('Q')
-                          sample=[]
-                          for i in range(n):
-                              v=value(et)
-                              if i<5:sample.append(v)
-                          return {'count':n,'first':sample}
-                      return num({0:'B',1:'b',2:'H',3:'h',4:'I',5:'i',6:'f',7:'?',10:'Q',11:'q',12:'d'}[t])
-                  assert f.read(4)==b'GGUF'
-                  version=num('I');nt,nk=num('Q'),num('Q')
-                  print('MODEL',name,'bytes',(base/name).stat().st_size)
-                  for _ in range(nk):
-                      k=string();v=value(num('I'))
-                      if not isinstance(v,dict) or k=='tokenizer.ggml.tokens':print(k,json.dumps(v,ensure_ascii=False))
-          p=Path('/home/bc/doctrad2-ocr-test-4diiVr/page.png')
-          print('PNG',struct.unpack('>II',p.read_bytes()[16:24]))
-          PY
-          printf '\n=== Restore translation runtime ===\n'
-          sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service
-          for attempt in $(seq 1 90); do
-            if curl -fsS --max-time 2 http://127.0.0.1:52365/health >/dev/null 2>&1; then break; fi
-            sleep 2
-          done
-          python3 - <<'PY'
-          import urllib.request,json,time
-          opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
-          def request(path,data=None):
-              q=urllib.request.Request('http://127.0.0.1:52365'+path,data=None if data is None else json.dumps(data).encode(),headers={'Content-Type':'application/json'})
-              with opener.open(q,timeout=90) as r:return json.load(r)
-          print('RUNTIME_HEALTH',request('/health'))
-          source='Input voltage: 12 V. Operating temperature: -20 to 55 degrees Celsius.'
-          prompt='<bos><start_of_turn>user\nYou are a professional English (en) to French (fr) translator. Your goal is to accurately convey the meaning and nuances of the original English text while adhering to French grammar, vocabulary, and cultural sensitivities.\nProduce only the French translation, without any additional explanations or commentary. Please translate the following English text into French:\n\n\n'+source+'<end_of_turn>\n<start_of_turn>model\n'
-          tokens=request('/tokenize',{'content':prompt,'add_special':False,'parse_special':True})['tokens']
-          started=time.monotonic()
-          r=request('/completion',{'prompt':tokens,'n_predict':256,'temperature':0,'seed':42,'stream':False})
-          print('LIVE_TRANSLATION',json.dumps({'source':source,'target':r.get('content'),'seconds':round(time.monotonic()-started,3),'truncated':r.get('truncated'),'stop_type':r.get('stop_type')},ensure_ascii=False))
-          assert r.get('content','').strip() and not r.get('truncated') and r.get('stop_type')!='limit'
+          root=Path('/home/bc/.cache/doctrad2/ocr-source-inspection')
+          root.mkdir(parents=True,exist_ok=True)
+          for name in ('modeling_deepseekv2.py','modeling_unlimitedocr.py','conversation.py'):
+              p=root/name
+              if not p.exists():
+                  p.write_bytes(urllib.request.urlopen('https://huggingface.co/baidu/Unlimited-OCR/resolve/main/'+name,timeout=30).read())
+              s=p.read_text().splitlines()
+              print('SOURCE',name)
+              patterns=('class DeepseekV2Attention','class DeepseekV2AttentionNo','self.rotary_emb','apply_rotary_pos_emb','sft_format=','global_view','images_seq_mask')
+              ids=set()
+              for i,l in enumerate(s):
+                  if any(k in l for k in patterns):ids.update(range(max(0,i-3),min(len(s),i+15)))
+              for i in sorted(ids):print(str(i+1)+':'+s[i])
           PY
           REMOTE_SCRIPT
