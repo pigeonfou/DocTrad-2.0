@@ -12,16 +12,24 @@ jobs:
     runs-on: [self-hosted, Linux, X64, doctrad2-deploy]
     timeout-minutes: 3
     steps:
-      - name: Check application and existing BC250 access
+      - name: Prepare dedicated runner identity
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
+          umask 077
+          access_dir="$HOME/.ssh/doctrad2-bc250"
+          mkdir -p "$access_dir"
+          if [[ ! -e "$access_dir/id_ed25519" ]]; then
+            ssh-keygen -q -t ed25519 -N '' -C doctrad2-runner-to-bc250 -f "$access_dir/id_ed25519"
+          fi
+          chmod 700 "$access_dir"
+          chmod 600 "$access_dir/id_ed25519"
+          printf 'RUNNER_PUBLIC_KEY='
+          ssh-keygen -y -f "$access_dir/id_ed25519"
+          printf 'RUNNER_ROUTE='
+          ip -j route get 192.168.6.22
+          printf '\nBC250_HOST_KEY_CANDIDATE_BEGIN\n'
+          ssh-keyscan -T 10 -t ed25519 192.168.6.22 2>/dev/null
+          printf 'BC250_HOST_KEY_CANDIDATE_END\n'
           printf '\n=== Application health ===\n'
           curl -fsS --max-time 10 http://127.0.0.1:8097/health
-          printf '\n=== Services ===\n'
-          systemctl is-active doctrad2-web doctrad2-worker
-          printf '\n=== Existing SSH access to BC250 ===\n'
-          timeout --foreground --kill-after=5s 25s ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 bc@192.168.6.22 'printf "\n=== OCR revision ===\n"; git -C /home/bc/.unsloth/llama.cpp log -1 --format="%H %s"; printf "\n=== Runtime services ===\n"; systemctl is-active doctrad2-bc250-runtime doctrad2-bc250-gateway; printf "\n=== OCR binary ===\n"; /home/bc/.unsloth/llama.cpp/build-doctrad2-ocr/bin/llama-mtmd-cli --version'
-          access_status=$?
-          printf '\nBC250_SSH_EXIT=%s\n' "$access_status"
-          exit "$access_status"
