@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
           cd /home/bc/.unsloth/llama.cpp
           printf '\n=== Source tree ===\n'
-          ls -ld .git tools/mtmd src/models/deepseek* build-doctrad2-ocr/bin/llama-mtmd-cli
+          ls -ld tools/mtmd src/models/deepseek* build-doctrad2-ocr/bin/llama-mtmd-cli
           printf '\n=== Generation / prompt assembly ===\n'
           sed -n '270,365p' tools/mtmd/mtmd-cli.cpp
           printf '\n=== Deepseek OCR implementations ===\n'
