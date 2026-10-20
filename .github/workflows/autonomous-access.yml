@@ -24,22 +24,25 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - name: Inspect OCR input and runtime implementation
+      - name: Inspect OCR architecture and input
         shell: bash
         run: |
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s' <<'REMOTE_SCRIPT'
           set -euo pipefail
           cd /home/bc/.unsloth/llama.cpp
-          printf '\n=== Source tree ===\n'
-          ls -ld tools/mtmd src/models/deepseek* build-doctrad2-ocr/bin/llama-mtmd-cli
-          printf '\n=== Generation / prompt assembly ===\n'
-          sed -n '270,365p' tools/mtmd/mtmd-cli.cpp
-          printf '\n=== Deepseek OCR implementations ===\n'
-          rg -n 'deepseek-ocr|DEEPSEEK_OCR|deepseek2-ocr|add_bos|add_eos' common/chat.cpp tools/mtmd/mtmd.cpp src/models/deepseek* | head -90
+          printf '\n=== Deepseek OCR implementation ===\n'
+          cat src/models/deepseek2ocr.cpp
+          printf '\n=== OCR chat template ===\n'
+          grep -n -A32 -B8 'LLM_CHAT_TEMPLATE_DEEPSEEK_OCR' src/llama-chat.cpp || true
+          grep -n -A25 -B8 'deepseek-ocr' common/chat.cpp || true
+          printf '\n=== Multimodal special tokens ===\n'
+          grep -n -E 'deepseek|add_bos|add_eos|tokenize.*text|img_start|img_end' tools/mtmd/mtmd.cpp | head -100
           printf '\n=== Runtime launch configuration ===\n'
           systemctl cat doctrad2-bc250-runtime.service
-          printf '\n=== Existing public OCR test input ===\n'
+          printf '\n=== Existing OCR test input ===\n'
           file /home/bc/doctrad2-ocr-test-4diiVr/page.png
-          printf '\n=== Model files ===\n'
+          printf '\n=== Existing model files ===\n'
           ls -lh /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/
-                    REMOTE_SCRIPT
+          printf '\n=== Python tooling ===\n'
+          ls /home/bc/.unsloth/venv/bin/python* /home/bc/.unsloth/llama.cpp/gguf-py/gguf/scripts/gguf_dump.py 2>/dev/null || true
+          REMOTE_SCRIPT
