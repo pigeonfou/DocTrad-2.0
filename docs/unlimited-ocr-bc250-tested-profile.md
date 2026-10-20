@@ -25,6 +25,8 @@ Exécution 39516672666 : fiche AN/PRC deux pages à 144 dpi. Les deux générati
 
 Exécution 39517254256 : comparaison à 288 dpi avec extraction du texte des cellules HTML. Les deux générations terminent (31,993 et 51,250 secondes), mais le contrôle strict échoue encore : les petites mentions omises ne réapparaissent pas. Après extraction des cellules, la deuxième page atteint 97,13 % de rappel lexical et 97,31 % de précision par rapport à la couche PDF native ; ce comparatif reste partiel et affecté par les césures et les textes d'images. Le service de traduction est revenu actif et son endpoint /health répond ok.
 
+Exécution 39517568840 : quatre zones en grille 2×2, chevauchement de 10 %, première page à 288 dpi. Les quatre générations terminent en environ 20 à 23 secondes chacune, mais les mentions recherchées restent absentes et les zones coupent des lignes de texte. Ce mode est rejeté pour une activation automatique ; les résultats partiels ne doivent pas remplacer la page entière. Traduction restaurée et santé ok.
+
 ## Utilisation et limites
 
 Le script scripts/benchmark-unlimited-ocr.py permet de reproduire ces tests avec les fichiers publics dont le SHA256 est vérifié. Les réponses brutes, journaux et résultats JSON restent dans le répertoire de benchmark de chaque exécution sur la BC250.
