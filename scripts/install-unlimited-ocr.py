@@ -25,19 +25,50 @@ def verified(path, size, sha):
         return hashlib.file_digest(handle, "sha256").hexdigest() == sha
 
 
+def candidates(explicit=None):
+    if explicit:
+        return [explicit.expanduser()]
+    found = []
+    located = shutil.which("llama-mtmd-cli")
+    if located:
+        found.append(Path(located))
+    roots = [Path.home(), Path("/opt"), Path("/usr/local/bin")]
+    for root in roots:
+        for directory, dirs, files in os.walk(root, followlinks=False):
+            depth = len(Path(directory).relative_to(root).parts)
+            dirs[:] = sorted(d for d in dirs if d not in {
+                "models", "hub", "node_modules", ".git", "venv", ".venv", "Trash"
+            }) if depth < 8 else []
+            if "llama-mtmd-cli" in files:
+                found.append(Path(directory) / "llama-mtmd-cli")
+    return list(dict.fromkeys(found))
+
+
 def runtime(explicit=None):
-    candidates = [explicit] if explicit else [
-        Path.home() / ".unsloth/llama.cpp/llama-mtmd-cli",
-        Path.home() / ".unsloth/llama.cpp/build/bin/llama-mtmd-cli",
-        Path.home() / "ai-build/llama.cpp/build-vulkan/bin/llama-mtmd-cli",
-    ]
-    for path in candidates:
-        if path and path.is_file() and os.access(path, os.X_OK):
-            result = subprocess.run([str(path), "--help"], capture_output=True, text=True, timeout=30)
-            help_text = result.stdout + result.stderr
-            if result.returncode == 0 and all(flag in help_text for flag in ("--mmproj", "--image", "--device")):
-                return path.resolve()
-    raise RuntimeError("llama-mtmd-cli compatible introuvable ; aucun moteur n'a été compilé ou modifié")
+    paths = candidates(explicit)
+    if not paths:
+        raise RuntimeError("Aucun llama-mtmd-cli trouvé dans PATH, le dossier utilisateur, /opt ou /usr/local/bin. "
+                           "Le llama-server existant ne suffit pas pour cet essai multimodal CLI.")
+    for path in paths:
+        if not path.is_file() or not os.access(path, os.X_OK):
+            print(f"REFUS {path}: absent ou non exécutable", flush=True)
+            continue
+        try:
+            result = subprocess.run([str(path), "--help"], capture_output=True, text=True,
+                                    errors="replace", timeout=30)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            print(f"REFUS {path}: {exc}", flush=True)
+            continue
+        help_text = result.stdout + result.stderr
+        missing = [flag for flag in ("--mmproj", "--image", "--device") if flag not in help_text]
+        if result.returncode == 0 and not missing:
+            print(f"Client multimodal détecté : {path}", flush=True)
+            return path.resolve()
+        print(f"REFUS {path}: code={result.returncode}, options absentes={missing}", flush=True)
+        if result.returncode:
+            print(help_text[-2000:], flush=True)
+    raise RuntimeError("Aucun client multimodal accepté ; voir les diagnostics ci-dessus. "
+                       "Aucun moteur ni service n'a été modifié.")
 
 
 def install_file(directory, name, size, sha, offline=False):
@@ -76,10 +107,14 @@ def main():
     parser.add_argument("--binary", type=Path)
     parser.add_argument("--directory", type=Path, default=Path.home() / ".local/share/doctrad2/models/unlimited-ocr")
     parser.add_argument("--offline", action="store_true", help="Vérifier uniquement les fichiers déjà présents")
+    parser.add_argument("--diagnose", action="store_true", help="Détection seule, sans téléchargement")
     args = parser.parse_args()
     if os.geteuid() == 0:
         parser.error("Exécuter depuis le compte bc, sans sudo")
     binary = runtime(args.binary)
+    if args.diagnose:
+        print("Détection réussie ; compatibilité du modèle à vérifier par inférence.")
+        return
     args.directory.mkdir(parents=True, exist_ok=True)
     for name, (size, sha) in FILES.items():
         install_file(args.directory, name, size, sha, args.offline)
@@ -96,4 +131,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+        raise SystemExit(str(exc)) from None

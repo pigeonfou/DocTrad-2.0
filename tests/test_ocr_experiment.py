@@ -86,3 +86,29 @@ def test_install_is_pinned_and_atomic(tmp_path, monkeypatch):
 def test_offline_install_requires_files(tmp_path):
     with pytest.raises(RuntimeError, match="hors ligne"):
         installer.install_file(tmp_path, "model.gguf", 3, "a" * 64, offline=True)
+
+
+def test_runtime_reports_missing_library(tmp_path, monkeypatch, capsys):
+    binary = tmp_path / "llama-mtmd-cli"
+    binary.write_text("test")
+    binary.chmod(0o755)
+    monkeypatch.setattr(installer.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        returncode=127, stdout="", stderr="libmtmd.so: cannot open shared object file"))
+    with pytest.raises(RuntimeError, match="diagnostics"):
+        installer.runtime(binary)
+    assert "libmtmd.so" in capsys.readouterr().out
+
+
+def test_runtime_absence_is_distinct_from_rejection(monkeypatch):
+    monkeypatch.setattr(installer, "candidates", lambda _: [])
+    with pytest.raises(RuntimeError, match="Aucun llama-mtmd-cli trouvé"):
+        installer.runtime()
+
+
+def test_runtime_accepts_supported_explicit_path(tmp_path, monkeypatch):
+    binary = tmp_path / "llama-mtmd-cli"
+    binary.write_text("test")
+    binary.chmod(0o755)
+    monkeypatch.setattr(installer.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        returncode=0, stdout="--mmproj --image --device", stderr=""))
+    assert installer.runtime(binary) == binary.resolve()
