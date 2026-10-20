@@ -69,7 +69,7 @@ def accuracy(source, target):
             "numbers_preserved": numbers(left) == numbers(right)}
 
 
-def prepare(directory, source_pdf, min_long_edge=0, reference_only=False, render_scale=2):
+def prepare(directory, source_pdf, min_long_edge=0, reference_only=False, render_scale=2, tile_grid=1, page_limit=0):
     import pymupdf as fitz
     if hashlib.sha256(source_pdf.read_bytes()).hexdigest() not in SOURCE_HASHES:
         raise SystemExit("Only the pinned public reference is permitted")
@@ -92,10 +92,26 @@ def prepare(directory, source_pdf, min_long_edge=0, reference_only=False, render
         fixtures.append({"name": label, "image": name, "source": "\n".join(text_lines)})
     with fitz.open(source_pdf) as reference:
         for page in reference:
+            if page_limit and page.number >= page_limit:
+                break
             name = f"technical-reference-{page.number + 1}.png"
             page.get_pixmap(matrix=fitz.Matrix(render_scale, render_scale), alpha=False).save(directory / name)
             fixtures.append({"name": f"technical-reference-{page.number + 1}",
                              "image": name, "source": page.get_text(sort=False)})
+            if tile_grid > 1:
+                for row in range(tile_grid):
+                    for col in range(tile_grid):
+                        w, h = page.rect.width / tile_grid, page.rect.height / tile_grid
+                        clip = fitz.Rect(max(0, col*w-w*.1), max(0, row*h-h*.1),
+                                         min(page.rect.width, (col+1)*w+w*.1),
+                                         min(page.rect.height, (row+1)*h+h*.1))
+                        label = f"technical-reference-{page.number + 1}-tile-{row}-{col}"
+                        page.get_pixmap(matrix=fitz.Matrix(render_scale, render_scale), clip=clip, alpha=False).save(directory / (label+".png"))
+                        fixtures.append({"name": label, "image": label+".png",
+                                         "source": page.get_text(clip=clip, sort=False),
+                                         "clip": list(clip), "diagnostic_tile": True})
+                fixtures = [f for f in fixtures if f["name"] != f"technical-reference-{page.number + 1}"]
+
     if reference_only:
         fixtures = [item for item in fixtures if item["name"].startswith("technical-reference-")]
     for fixture in fixtures:
@@ -179,6 +195,8 @@ def main():
     parser.add_argument("--projector", type=Path)
     parser.add_argument("--reference-only", action="store_true")
     parser.add_argument("--min-long-edge", type=int, default=0)
+    parser.add_argument("--tile-grid", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--page-limit", type=int, default=0)
     parser.add_argument("--render-scale", type=float, default=2)
     parser.add_argument("--context", type=int, default=8192)
     parser.add_argument("--predict", type=int, default=2400)
@@ -186,7 +204,7 @@ def main():
     if args.prepare:
         if not args.source_pdf:
             parser.error("--source-pdf is required for fixture preparation")
-        prepare(args.directory, args.source_pdf, args.min_long_edge, args.reference_only, args.render_scale)
+        prepare(args.directory, args.source_pdf, args.min_long_edge, args.reference_only, args.render_scale, args.tile_grid, args.page_limit)
         return 0
     for key in ("binary", "model", "projector"):
         if getattr(args, key) is None:
