@@ -1,0 +1,27 @@
+name: DocTrad2 autonomous access diagnostic
+on:
+  push:
+    branches: [diagnostic/autonomous-bc250-20261021]
+permissions:
+  contents: read
+concurrency:
+  group: doctrad2-production
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Linux, X64, doctrad2-deploy]
+    timeout-minutes: 3
+    steps:
+      - name: Check application and existing BC250 access
+        shell: bash
+        run: |
+          set +e
+          printf '\n=== Application health ===\n'
+          curl -fsS --max-time 10 http://127.0.0.1:8097/health
+          printf '\n=== Services ===\n'
+          systemctl is-active doctrad2-web doctrad2-worker
+          printf '\n=== Existing SSH access to BC250 ===\n'
+          timeout --foreground --kill-after=5s 25s ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 bc@192.168.6.22 'printf "\n=== OCR revision ===\n"; git -C /home/bc/.unsloth/llama.cpp log -1 --format="%H %s"; printf "\n=== Runtime services ===\n"; systemctl is-active doctrad2-bc250-runtime doctrad2-bc250-gateway; printf "\n=== OCR binary ===\n"; /home/bc/.unsloth/llama.cpp/build-doctrad2-ocr/bin/llama-mtmd-cli --version'
+          access_status=$?
+          printf '\nBC250_SSH_EXIT=%s\n' "$access_status"
+          exit "$access_status"
