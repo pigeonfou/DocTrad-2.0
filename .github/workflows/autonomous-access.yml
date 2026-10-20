@@ -24,8 +24,22 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - name: Verify BC250 enrollment and diagnostic access
+      - name: Inspect OCR input and runtime implementation
         shell: bash
         run: |
+          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s' <<'REMOTE_SCRIPT'
           set -euo pipefail
-          timeout --foreground --kill-after=5s 30s ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'printf "\n=== OCR revision ===\n"; git -C /home/bc/.unsloth/llama.cpp log -1 --format="%H %s"; printf "\n=== Runtime services ===\n"; systemctl is-active doctrad2-bc250-runtime.service doctrad2-bc250-gateway.service || true; printf "\n=== OCR binary ===\n"; /home/bc/.unsloth/llama.cpp/build-doctrad2-ocr/bin/llama-mtmd-cli --version'
+          cd /home/bc/.unsloth/llama.cpp
+          printf '\n=== Source tree ===\n'
+          ls -ld .git tools/mtmd src/models/deepseek* build-doctrad2-ocr/bin/llama-mtmd-cli
+          printf '\n=== Generation / prompt assembly ===\n'
+          sed -n '270,365p' tools/mtmd/mtmd-cli.cpp
+          printf '\n=== Deepseek OCR implementations ===\n'
+          rg -n 'deepseek-ocr|DEEPSEEK_OCR|deepseek2-ocr|add_bos|add_eos' common/chat.cpp tools/mtmd/mtmd.cpp src/models/deepseek* | head -90
+          printf '\n=== Runtime launch configuration ===\n'
+          systemctl cat doctrad2-bc250-runtime.service
+          printf '\n=== Existing public OCR test input ===\n'
+          file /home/bc/doctrad2-ocr-test-4diiVr/page.png
+          printf '\n=== Model files ===\n'
+          ls -lh /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/
+                    REMOTE_SCRIPT
