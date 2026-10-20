@@ -13,6 +13,21 @@ Le projecteur visuel est obligatoire. Installer les fichiers séparément en
 conservant la révision et les sommes SHA-256 du fournisseur ; aucun téléchargement
 n'a lieu pendant l'inférence.
 
+L'installateur `scripts/install-unlimited-ocr.py` automatise cette préparation
+depuis le compte `bc`, sans sudo. Il exige un client multimodal existant avant
+de télécharger. Les fichiers sont épinglés à la révision
+`0dc781d8a23f52963918ebd5b2d1b9fe61504661` et vérifiés par taille et SHA-256.
+Il réutilise les fichiers valides, refuse d'écraser un fichier invalide et publie
+chaque téléchargement atomiquement après vérification. Prévoir environ 2,82 Gio
+pour les deux fichiers, plus une réserve de 512 Mio. `--offline` vérifie les
+fichiers préinstallés sans téléchargement. L'installation ne réserve pas le GPU
+et ne lance aucune inférence. `installation.json` conserve les empreintes et
+signale explicitement que l'inférence n'a pas encore été validée.
+
+```bash
+python3 scripts/install-unlimited-ocr.py
+```
+
 Le runtime existant doit contenir un `llama-mtmd-cli` compatible `deepseek2-ocr`
 et Vulkan. Le script ne compile ni n'installe de moteur. La conversion
 Unlimited-OCR a été intégrée par llama.cpp PR 24969 ; le support R-SWA de la
