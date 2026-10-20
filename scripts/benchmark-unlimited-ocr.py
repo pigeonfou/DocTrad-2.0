@@ -4,6 +4,7 @@ import argparse
 from collections import Counter
 import fcntl
 import hashlib
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,21 @@ SOURCE_HASHES = {
 }
 
 
+class TableText(HTMLParser):
+    """Keep HTML cell boundaries without counting markup as recognized text."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+    def handle_starttag(self, tag, attrs):
+        if tag in {"td", "th", "tr", "table", "br", "p"}:
+            self.parts.append("\n" if tag in {"tr", "table", "p", "br"} else "\t")
+    def handle_endtag(self, tag):
+        if tag in {"td", "th", "tr", "table", "p"}:
+            self.parts.append("\n" if tag in {"tr", "table", "p"} else "\t")
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
 def clean_output(text):
     text = re.sub(r"<\|det\|>.*?<\|/det\|>", "", text, flags=re.S)
     # A leading opening token can be omitted by the CLI; require its closing marker.
@@ -25,7 +41,9 @@ def clean_output(text):
     text = re.sub(r"<\|/?(?:ref|grounding)\|>", "", text)
     for token in ("<｜end▁of▁sentence｜>", "<｜begin▁of▁sentence｜>", "<｜▁pad▁｜>"):
         text = text.replace(token, "")
-    return text.strip()
+    parser = TableText()
+    parser.feed(text)
+    return "".join(parser.parts).strip()
 
 
 def normalize(text):
@@ -51,7 +69,7 @@ def accuracy(source, target):
             "numbers_preserved": numbers(left) == numbers(right)}
 
 
-def prepare(directory, source_pdf, min_long_edge=0, reference_only=False):
+def prepare(directory, source_pdf, min_long_edge=0, reference_only=False, render_scale=2):
     import pymupdf as fitz
     if hashlib.sha256(source_pdf.read_bytes()).hexdigest() not in SOURCE_HASHES:
         raise SystemExit("Only the pinned public reference is permitted")
@@ -75,7 +93,7 @@ def prepare(directory, source_pdf, min_long_edge=0, reference_only=False):
     with fitz.open(source_pdf) as reference:
         for page in reference:
             name = f"technical-reference-{page.number + 1}.png"
-            page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False).save(directory / name)
+            page.get_pixmap(matrix=fitz.Matrix(render_scale, render_scale), alpha=False).save(directory / name)
             fixtures.append({"name": f"technical-reference-{page.number + 1}",
                              "image": name, "source": page.get_text(sort=False)})
     if reference_only:
@@ -161,13 +179,14 @@ def main():
     parser.add_argument("--projector", type=Path)
     parser.add_argument("--reference-only", action="store_true")
     parser.add_argument("--min-long-edge", type=int, default=0)
+    parser.add_argument("--render-scale", type=float, default=2)
     parser.add_argument("--context", type=int, default=8192)
     parser.add_argument("--predict", type=int, default=2400)
     args = parser.parse_args()
     if args.prepare:
         if not args.source_pdf:
             parser.error("--source-pdf is required for fixture preparation")
-        prepare(args.directory, args.source_pdf, args.min_long_edge, args.reference_only)
+        prepare(args.directory, args.source_pdf, args.min_long_edge, args.reference_only, args.render_scale)
         return 0
     for key in ("binary", "model", "projector"):
         if getattr(args, key) is None:
