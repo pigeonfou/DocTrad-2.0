@@ -17,6 +17,8 @@ SOURCE_SHA = "40e3d24478e8ae219039c505f3faa3b0de6d5962c3f738d323f8b4a48146f2b2"
 
 def clean_output(text):
     text = re.sub(r"<\|det\|>.*?<\|/det\|>", "", text, flags=re.S)
+    # A leading opening token can be omitted by the CLI; require its closing marker.
+    text = re.sub(r"(?m)^[ \t]*[A-Za-z_][\w-]*[ \t]*\[[0-9., \t+-]+\][ \t]*<\|/det\|>", "", text)
     text = re.sub(r"<\|/?(?:ref|grounding)\|>", "", text)
     for token in ("<｜end▁of▁sentence｜>", "<｜begin▁of▁sentence｜>", "<｜▁pad▁｜>"):
         text = text.replace(token, "")
