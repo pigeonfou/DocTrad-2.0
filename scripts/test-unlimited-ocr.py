@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import time
 
@@ -13,6 +14,15 @@ import time
 def digest(path):
     with path.open("rb") as handle:
         return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def recognized_text(output):
+    """Ignore control/grounding tokens when deciding whether OCR read anything."""
+    output = re.sub(r"<\|det\|>.*?<\|/det\|>", "", output, flags=re.DOTALL)
+    output = re.sub(r"<\|/?(?:ref|grounding)\|>", "", output)
+    for token in ("<｜end▁of▁sentence｜>", "<｜begin▁of▁sentence｜>", "<｜▁pad▁｜>"):
+        output = output.replace(token, "")
+    return output.strip()
 
 
 def command(binary, model, projector, image):
@@ -64,9 +74,16 @@ def main():
         manifest["command"] = invocation
         try:
             with (args.output / "ocr.txt").open("w") as out, (args.output / "runtime.log").open("w") as err:
-                result = subprocess.run(invocation, stdout=out, stderr=err, timeout=900, check=False)
+                result = subprocess.run(invocation, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
+                                        timeout=900, check=False, start_new_session=True)
+            manifest["runtime_returncode"] = result.returncode
             manifest["returncode"] = result.returncode
             manifest["status"] = "completed_requires_review" if result.returncode == 0 else "failed"
+            if result.returncode == 0:
+                text = recognized_text((args.output / "ocr.txt").read_text(encoding="utf-8", errors="replace"))
+                manifest["recognized_characters"] = len(text)
+                if not any(char.isalnum() for char in text):
+                    manifest.update(status="empty_ocr", returncode=65)
         except subprocess.TimeoutExpired:
             manifest.update(status="timeout", returncode=124)
         finally:
