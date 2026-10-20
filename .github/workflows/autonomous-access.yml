@@ -2,7 +2,6 @@ name: DocTrad2 autonomous access diagnostic
 on:
   push:
     branches: [diagnostic/autonomous-bc250-20261021]
-    paths: [.github/workflows/autonomous-access.yml]
 permissions:
   contents: read
 concurrency:
@@ -11,7 +10,7 @@ concurrency:
 jobs:
   diagnose:
     runs-on: [self-hosted, Linux, X64, doctrad2-deploy]
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - name: Configure dedicated SSH client with pinned host identity
         shell: bash
@@ -25,69 +24,55 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - name: Compare OCR clients and translate recognized source
+      - name: Verify model hashes and inspect reference conversion headers
         shell: bash
         run: |
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s' <<'REMOTE_SCRIPT'
           set -euo pipefail
-          official=/home/bc/.cache/doctrad2/ocr-runtime/1725dcab4baac46c4eb197afc96af7b57a81882a/build-vulkan/bin
-          test_dir=/home/bc/doctrad2-ocr-iteration-DaNT8a
-          export OFFICIAL_BIN="$official" TEST_DIR="$test_dir"
-          test -x "$official/llama-mtmd-cli"
-          trap 'sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service' EXIT
-          sudo -n /usr/bin/systemctl stop doctrad2-bc250-runtime.service
           python3 - <<'PY'
-          import json,os,subprocess,time,re
+          import urllib.request,json,struct,hashlib
           from pathlib import Path
-          out=Path(os.environ['TEST_DIR'])
-          model_root=Path('/home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661')
-          cases=[
-           ('bundled-document-parsing',Path('/home/bc/.unsloth/llama.cpp/build-doctrad2-ocr/bin/llama-mtmd-cli'),[]),
-           ('official-document-parsing',Path(os.environ['OFFICIAL_BIN'])/'llama-mtmd-cli',['--override-kv','deepseek2-ocr.attention.sliding_window=int:128','--cache-type-v','f32'])]
-          results=[]
-          for label,binary,extra in cases:
-              command=[str(binary),'-m',str(model_root/'Unlimited-OCR-BF16.gguf'),'--mmproj',str(model_root/'mmproj-Unlimited-OCR-F16.gguf'),'--image',str(out/'synthetic.png'),'-p','document parsing.','--chat-template','deepseek-ocr','--no-jinja','--device','Vulkan0','--n-gpu-layers','99','--flash-attn','off','--no-warmup','--temp','0','--repeat-penalty','1.0','-c','4096','-n','256']+extra
-              env=os.environ.copy()
-              if label.startswith('official'):env['LD_LIBRARY_PATH']=str(binary.parent)
-              started=time.monotonic()
-              with (out/(label+'.txt')).open('wb') as stdout,(out/(label+'.log')).open('wb') as stderr:
-                  try:
-                      result=subprocess.run(command,stdin=subprocess.DEVNULL,stdout=stdout,stderr=stderr,timeout=240,env=env,start_new_session=True)
-                      code=result.returncode
-                  except subprocess.TimeoutExpired:code=124
-              text=(out/(label+'.txt')).read_text(errors='replace')
-              clean=re.sub(r'<\|det\|>.*?<\|/det\|>','',text,flags=re.S)
-              clean=re.sub(r'<\|/?(?:ref|grounding)\|>','',clean)
-              clean=clean.replace('<｜end▁of▁sentence｜>','').replace('<｜begin▁of▁sentence｜>','').strip()
-              normalized=' '.join(clean.upper().replace('−','-').split())
-              passed=code==0 and all(s in normalized for s in ('INPUT VOLTAGE','12 V','TEMPERATURE','-20','55'))
-              item={'case':label,'returncode':code,'seconds':round(time.monotonic()-started,2),'text':text,'source_values_preserved':passed}
-              print('PUBLIC_OCR_RESULT='+json.dumps(item,ensure_ascii=False),flush=True)
-              if code:print((out/(label+'.log')).read_text(errors='replace')[-3000:],flush=True)
-              if label.startswith('official') and passed:(out/'recognized.txt').write_text(clean)
-              results.append(item)
-          (out/'comparison.json').write_text(json.dumps(results,ensure_ascii=False,indent=2))
-          if not results[-1]['source_values_preserved']:raise SystemExit('Official OCR not validated')
-          PY
-          sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service
-          for attempt in $(seq 1 90); do
-            if curl -fsS --max-time 2 http://127.0.0.1:52365/health >/dev/null 2>&1; then break; fi
-            sleep 2
-          done
-          python3 - <<'PY'
-          import json,urllib.request,os,time
-          from pathlib import Path
-          opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
-          def request(path,data):
-              q=urllib.request.Request('http://127.0.0.1:52365'+path,data=json.dumps(data).encode(),headers={'Content-Type':'application/json'})
-              with opener.open(q,timeout=90) as r:return json.load(r)
-          source=(Path(os.environ['TEST_DIR'])/'recognized.txt').read_text()
-          prompt='<bos><start_of_turn>user\nYou are a professional English (en) to French (fr) translator. Your goal is to accurately convey the meaning and nuances of the original English text while adhering to French grammar, vocabulary, and cultural sensitivities.\nProduce only the French translation, without any additional explanations or commentary. Please translate the following English text into French:\n\n\n'+source+'<end_of_turn>\n<start_of_turn>model\n'
-          tokens=request('/tokenize',{'content':prompt,'parse_special':True,'add_special':False})['tokens']
-          r=request('/completion',{'prompt':tokens,'n_predict':256,'temperature':0,'stream':False,'seed':42})
-          result={'source':source,'target':r.get('content'),'truncated':r.get('truncated'),'stop_type':r.get('stop_type')}
-          print('PUBLIC_OCR_TRANSLATION='+json.dumps(result,ensure_ascii=False))
-          assert r.get('content','').strip() and not r.get('truncated') and r.get('stop_type')!='limit'
-          (Path(os.environ['TEST_DIR'])/'translation.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+          opener=urllib.request.build_opener()
+          def get(url):
+              with opener.open(url,timeout=45) as r:return json.load(r)
+          for repo in ('sahilchachra/Unlimited-OCR-GGUF','sabafallah/Unlimited-OCR-GGUF'):
+              try:
+                  model=get('https://huggingface.co/api/models/'+repo+'?blobs=true')
+              except Exception as e:
+                  print('REFERENCE_METADATA_ERROR',repo,type(e).__name__,str(e));continue
+              print('REFERENCE_REPO',repo,'revision',model['sha'])
+              files=[s for s in model.get('siblings',[]) if s['rfilename'].endswith('.gguf')]
+              for s in files:print('REFERENCE_FILE',json.dumps(s))
+              if repo.startswith('sahilchachra'):
+                  root=Path('/home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661')
+                  for s in files:
+                      p=root/s['rfilename']
+                      if p.exists() and ('BF16' in p.name or 'mmproj' in p.name):
+                          with p.open('rb') as f:actual=hashlib.file_digest(f,'sha256').hexdigest()
+                          print('LOCAL_HASH',p.name,actual,'expected',s.get('lfs',{}).get('sha256'))
+                  print('LOCAL_GGUF_FILES',[p.name for p in root.glob('*.gguf')])
+              else:
+                  for s in files:
+                      if 'mmproj' not in s['rfilename'].lower() and 'bf16' not in s['rfilename'].lower():continue
+                      url='https://huggingface.co/'+repo+'/resolve/'+model['sha']+'/'+s['rfilename']
+                      req=urllib.request.Request(url,headers={'Range':'bytes=0-65535'})
+                      with opener.open(req,timeout=45) as r:blob=r.read(65536)
+                      import io
+                      f=io.BytesIO(blob)
+                      def num(fmt):return struct.unpack('<'+fmt,f.read(struct.calcsize('<'+fmt)))[0]
+                      def string():return f.read(num('Q')).decode('utf8',errors='replace')
+                      def value(t):
+                          if t==8:return string()
+                          if t==9:
+                              et,n=num('I'),num('Q')
+                              if n>100:raise StopIteration
+                              return [value(et) for _ in range(n)]
+                          return num({0:'B',1:'b',2:'H',3:'h',4:'I',5:'i',6:'f',7:'?',10:'Q',11:'q',12:'d'}[t])
+                      assert f.read(4)==b'GGUF';num('I');num('Q');nk=num('Q')
+                      print('REFERENCE_GGUF_METADATA',s['rfilename'])
+                      try:
+                          for _ in range(nk):
+                              k=string();v=value(num('I'));print(k,json.dumps(v,ensure_ascii=False))
+                      except (StopIteration,struct.error):pass
           PY
           REMOTE_SCRIPT
