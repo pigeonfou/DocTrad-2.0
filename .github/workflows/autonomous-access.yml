@@ -24,59 +24,8 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - name: Isolate image tiling and CPU versus Vulkan
+      - name: Read translation runtime health after OCR diagnostic
         shell: bash
         run: |
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s' <<'REMOTE_SCRIPT'
-          set -euo pipefail
-          export TEST_DIR=/home/bc/doctrad2-ocr-iteration-DaNT8a
-          python3 - <<'PY'
-          import os,struct,zlib
-          from pathlib import Path
-          p=Path(os.environ['TEST_DIR'])/'synthetic.png'
-          b=p.read_bytes();pos=8;data=b''
-          while pos<len(b):
-              n=struct.unpack('>I',b[pos:pos+4])[0];typ=b[pos+4:pos+8];v=b[pos+8:pos+8+n];pos+=n+12
-              if typ==b'IDAT':data+=v
-          raw=zlib.decompress(data)
-          rows=[]
-          for y in range(0,480,2):
-              assert raw[y*1201]==0
-              rows.append(b'\0'+raw[y*1201+1:y*1201+1201:2])
-          def chunk(t,d):return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
-          out=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',600,240,8,0,0,0,0))+chunk(b'IDAT',zlib.compress(b''.join(rows)))+chunk(b'IEND',b'')
-          p.with_name('synthetic-single-view.png').write_bytes(out)
-          PY
-          printf '\n=== Original image feature assembly ===\n'
-          sed -n '425,550p' /home/bc/.cache/doctrad2/ocr-source-inspection/modeling_unlimitedocr.py
-          trap 'sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service' EXIT
-          sudo -n /usr/bin/systemctl stop doctrad2-bc250-runtime.service
-          python3 - <<'PY'
-          import os,json,re,time,subprocess
-          from pathlib import Path
-          base=Path('/home/bc/.cache/doctrad2/ocr-runtime/1725dcab4baac46c4eb197afc96af7b57a81882a')
-          binary=base/'build-vulkan/bin/llama-mtmd-cli'
-          out=Path(os.environ['TEST_DIR'])
-          model='/home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/Unlimited-OCR-BF16.gguf'
-          projector='/home/bc/.cache/doctrad2/ocr-reference/mmproj-unlimited-ocr-bf16.gguf'
-          for label,image,device in [
-           ('gpu-single-view',out/'synthetic-single-view.png','Vulkan0'),
-           ('gpu-canonical-image',base/'tools/mtmd/test-1.jpeg','Vulkan0'),
-           ('cpu-single-view',out/'synthetic-single-view.png','none')]:
-              cmd=[str(binary),'-m',model,'--mmproj',projector,'--image',str(image),'-p','document parsing.','--chat-template','deepseek-ocr','--no-jinja','--device',device,'--n-gpu-layers','0' if device=='none' else '99','--flash-attn','off','--no-warmup','--temp','0','--repeat-penalty','1.0','--override-kv','deepseek2-ocr.attention.sliding_window=int:128','--cache-type-v','f32','-c','4096','-n','256']
-              if device=='none':cmd+=['--no-mmproj-offload']
-              env=os.environ.copy();env['LD_LIBRARY_PATH']=str(binary.parent)
-              started=time.monotonic()
-              with (out/(label+'.txt')).open('wb') as stdout,(out/(label+'.log')).open('wb') as stderr:
-                  try:r=subprocess.run(cmd,stdin=subprocess.DEVNULL,stdout=stdout,stderr=stderr,env=env,timeout=240,start_new_session=True);code=r.returncode
-                  except subprocess.TimeoutExpired:code=124
-              text=(out/(label+'.txt')).read_text(errors='replace')
-              clean=re.sub(r'<\|det\|>.*?<\|/det\|>','',text,flags=re.S)
-              clean=re.sub(r'<\|/?ref\|>','',clean).strip()
-              normalized=' '.join(clean.upper().replace('−','-').split())
-              values=all(s in normalized for s in ('INPUT VOLTAGE','12 V','TEMPERATURE','-20','55'))
-              print('PUBLIC_OCR_ISOLATION='+json.dumps({'case':label,'returncode':code,'seconds':round(time.monotonic()-started,2),'source_values_preserved':values,'text':text},ensure_ascii=False),flush=True)
-              if code:print((out/(label+'.log')).read_text(errors='replace')[-2000:],flush=True)
-              if values:(out/'recognized.txt').write_text(clean)
-          PY
-          REMOTE_SCRIPT
+          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'systemctl is-active doctrad2-bc250-runtime.service doctrad2-bc250-gateway.service; curl -fsS --max-time 10 http://127.0.0.1:52365/health'
+          curl -fsS --max-time 10 http://127.0.0.1:8097/health
