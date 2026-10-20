@@ -10,7 +10,7 @@ concurrency:
 jobs:
   diagnose:
     runs-on: [self-hosted, Linux, X64, doctrad2-deploy]
-    timeout-minutes: 3
+    timeout-minutes: 8
     steps:
       - name: Configure dedicated SSH client with pinned host identity
         shell: bash
@@ -24,25 +24,62 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - name: Inspect OCR architecture and input
+      - name: Inspect metadata and verify live translation
         shell: bash
         run: |
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s' <<'REMOTE_SCRIPT'
           set -euo pipefail
           cd /home/bc/.unsloth/llama.cpp
-          printf '\n=== Deepseek OCR implementation ===\n'
-          cat src/models/deepseek2ocr.cpp
-          printf '\n=== OCR chat template ===\n'
-          grep -n -A32 -B8 'LLM_CHAT_TEMPLATE_DEEPSEEK_OCR' src/llama-chat.cpp || true
-          grep -n -A25 -B8 'deepseek-ocr' common/chat.cpp || true
-          printf '\n=== Multimodal special tokens ===\n'
-          grep -n -E 'deepseek|add_bos|add_eos|tokenize.*text|img_start|img_end' tools/mtmd/mtmd.cpp | head -100
-          printf '\n=== Runtime launch configuration ===\n'
-          systemctl cat doctrad2-bc250-runtime.service
-          printf '\n=== Existing OCR test input ===\n'
-          file /home/bc/doctrad2-ocr-test-4diiVr/page.png
-          printf '\n=== Existing model files ===\n'
-          ls -lh /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/
-          printf '\n=== Python tooling ===\n'
-          ls /home/bc/.unsloth/venv/bin/python* /home/bc/.unsloth/llama.cpp/gguf-py/gguf/scripts/gguf_dump.py 2>/dev/null || true
+          printf '\n=== Multimodal input framing ===\n'
+          sed -n '890,908p' tools/mtmd/mtmd.cpp
+          sed -n '1200,1325p' tools/mtmd/mtmd.cpp
+          printf '\n=== Local GGUF metadata ===\n'
+          python3 - <<'PY'
+          import struct,json
+          from pathlib import Path
+          base=Path('/home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661')
+          for name in ('Unlimited-OCR-BF16.gguf','mmproj-Unlimited-OCR-F16.gguf'):
+              with (base/name).open('rb') as f:
+                  def num(fmt): return struct.unpack('<'+fmt,f.read(struct.calcsize('<'+fmt)))[0]
+                  def string(): return f.read(num('Q')).decode('utf8',errors='replace')
+                  def value(t):
+                      if t==8:return string()
+                      if t==9:
+                          et,n=num('I'),num('Q')
+                          sample=[]
+                          for i in range(n):
+                              v=value(et)
+                              if i<5:sample.append(v)
+                          return {'count':n,'first':sample}
+                      return num({0:'B',1:'b',2:'H',3:'h',4:'I',5:'i',6:'f',7:'?',10:'Q',11:'q',12:'d'}[t])
+                  assert f.read(4)==b'GGUF'
+                  version=num('I');nt,nk=num('Q'),num('Q')
+                  print('MODEL',name,'bytes',(base/name).stat().st_size)
+                  for _ in range(nk):
+                      k=string();v=value(num('I'))
+                      if not isinstance(v,dict) or k=='tokenizer.ggml.tokens':print(k,json.dumps(v,ensure_ascii=False))
+          p=Path('/home/bc/doctrad2-ocr-test-4diiVr/page.png')
+          print('PNG',struct.unpack('>II',p.read_bytes()[16:24]))
+          PY
+          printf '\n=== Restore translation runtime ===\n'
+          sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service
+          for attempt in $(seq 1 90); do
+            if curl -fsS --max-time 2 http://127.0.0.1:52365/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          python3 - <<'PY'
+          import urllib.request,json,time
+          opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+          def request(path,data=None):
+              q=urllib.request.Request('http://127.0.0.1:52365'+path,data=None if data is None else json.dumps(data).encode(),headers={'Content-Type':'application/json'})
+              with opener.open(q,timeout=90) as r:return json.load(r)
+          print('RUNTIME_HEALTH',request('/health'))
+          source='Input voltage: 12 V. Operating temperature: -20 to 55 degrees Celsius.'
+          prompt='<bos><start_of_turn>user\nYou are a professional English (en) to French (fr) translator. Your goal is to accurately convey the meaning and nuances of the original English text while adhering to French grammar, vocabulary, and cultural sensitivities.\nProduce only the French translation, without any additional explanations or commentary. Please translate the following English text into French:\n\n\n'+source+'<end_of_turn>\n<start_of_turn>model\n'
+          tokens=request('/tokenize',{'content':prompt,'add_special':False,'parse_special':True})['tokens']
+          started=time.monotonic()
+          r=request('/completion',{'prompt':tokens,'n_predict':256,'temperature':0,'seed':42,'stream':False})
+          print('LIVE_TRANSLATION',json.dumps({'source':source,'target':r.get('content'),'seconds':round(time.monotonic()-started,3),'truncated':r.get('truncated'),'stop_type':r.get('stop_type')},ensure_ascii=False))
+          assert r.get('content','').strip() and not r.get('truncated') and r.get('stop_type')!='limit'
+          PY
           REMOTE_SCRIPT
