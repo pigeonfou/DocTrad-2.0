@@ -2,6 +2,7 @@ name: DocTrad2 autonomous access diagnostic
 on:
   push:
     branches: [diagnostic/autonomous-bc250-20261021]
+    paths: [.github/workflows/autonomous-access.yml]
 permissions:
   contents: read
 concurrency:
@@ -10,7 +11,7 @@ concurrency:
 jobs:
   diagnose:
     runs-on: [self-hosted, Linux, X64, doctrad2-deploy]
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Configure dedicated SSH client with pinned host identity
         shell: bash
@@ -24,8 +25,55 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - name: Read translation runtime health after OCR diagnostic
+      - uses: actions/checkout@v4
+      - name: Prepare public technical fixtures and copy to BC250
         shell: bash
         run: |
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'systemctl is-active doctrad2-bc250-runtime.service doctrad2-bc250-gateway.service; curl -fsS --max-time 10 http://127.0.0.1:52365/health'
-          curl -fsS --max-time 10 http://127.0.0.1:8097/health
+          set -euo pipefail
+          fixture_dir="$RUNNER_TEMP/unlimited-ocr-$GITHUB_RUN_ID"
+          /opt/doctrad2/current/.venv/bin/python scripts/benchmark-unlimited-ocr.py --prepare --directory "$fixture_dir" --source-pdf /opt/doctrad2/current/benchmarks/general_equipment_source.pdf
+          tar -C "$fixture_dir" -czf "$RUNNER_TEMP/ocr-fixtures-$GITHUB_RUN_ID.tar.gz" .
+          remote_dir="/home/bc/.cache/doctrad2/ocr-benchmarks/$GITHUB_RUN_ID"
+          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "mkdir -p '$remote_dir'"
+          scp -F "$HOME/.ssh/doctrad2-bc250/config" "$RUNNER_TEMP/ocr-fixtures-$GITHUB_RUN_ID.tar.gz" "doctrad2-bc250:$remote_dir/fixtures.tar.gz"
+          scp -F "$HOME/.ssh/doctrad2-bc250/config" scripts/benchmark-unlimited-ocr.py "doctrad2-bc250:$remote_dir/"
+          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "tar -xzf '$remote_dir/fixtures.tar.gz' -C '$remote_dir'"
+      - name: Measure OCR completeness and recognition quality
+        shell: bash
+        run: |
+          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s --' "$GITHUB_RUN_ID" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+          run_id=$1
+          source_dir=/home/bc/.cache/doctrad2/ocr-runtime/1725dcab4baac46c4eb197afc96af7b57a81882a
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/home/bc/.cache/doctrad2/ocr-runtime/1725dcab4baac46c4eb197afc96af7b57a81882a/tools/mtmd/mtmd-cli.cpp')
+          s=p.read_text()
+          anchor='    std::string generated_text = common_detokenize(ctx.lctx, generated_tokens);'
+          if 'DOCTRAD_OCR_FINISH' not in s:
+              assert s.count(anchor)==1
+              backup=p.with_suffix('.cpp.before-doctrad-observe')
+              with backup.open('x') as out:out.write(s)
+              observe='    fprintf(stderr, "DOCTRAD_OCR_FINISH tokens=%zu eog=%d\\n", generated_tokens.size(), int(!generated_tokens.empty() && llama_vocab_is_eog(ctx.vocab, generated_tokens.back())));\n'
+              p.write_text(s.replace(anchor,observe+anchor))
+          PY
+          cmake --build "$source_dir/build-vulkan" --target llama-mtmd-cli --parallel 2
+          trap 'sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service' EXIT
+          sudo -n /usr/bin/systemctl stop doctrad2-bc250-runtime.service
+          set +e
+          python3 "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id/benchmark-unlimited-ocr.py" \
+            --directory "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id" \
+            --binary "$source_dir/build-vulkan/bin/llama-mtmd-cli" \
+            --model /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/Unlimited-OCR-BF16.gguf \
+            --projector /home/bc/.cache/doctrad2/ocr-reference/mmproj-unlimited-ocr-bf16.gguf
+          status=$?
+          set -e
+          sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service
+          for attempt in $(seq 1 90); do
+            if curl -fsS --max-time 2 http://127.0.0.1:52365/health; then break; fi
+            sleep 2
+          done
+          printf '\nTRANSLATION_SERVICE_STATE='
+          systemctl is-active doctrad2-bc250-runtime.service
+          exit "$status"
+          REMOTE_SCRIPT
