@@ -7,7 +7,7 @@ permissions:
   contents: read
 concurrency:
   group: doctrad2-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   diagnose:
     runs-on: [self-hosted, Linux, X64, doctrad2-deploy]
@@ -38,7 +38,9 @@ jobs:
           stopped=[]
           for p in Path('/proc').glob('[0-9]*'):
               try:
-                  if Path(os.readlink(p/'exe')).name!='llama-server' or int(p.name)==runtime_pid:continue
+                  try: executable=Path(os.readlink(p/'exe')).name
+                  except PermissionError: continue
+                  if executable!='llama-server' or int(p.name)==runtime_pid:continue
                   if p.stat().st_uid!=os.getuid():raise RuntimeError('competing_runtime_not_owned_by_bc')
                   argv=[v.decode(errors='replace') for v in (p/'cmdline').read_bytes().split(b'\0')]
                   flag=next((v for v in ['-m','--model'] if v in argv),None)
