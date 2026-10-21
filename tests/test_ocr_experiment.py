@@ -1,6 +1,7 @@
 import importlib.util
 import hashlib
 import io
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import pytest
@@ -36,10 +37,63 @@ def test_cli_uses_argument_list_and_vulkan():
     assert cmd[cmd.index("--chat-template") + 1] == "deepseek-ocr"
 
 
+@pytest.mark.parametrize("output,expected", [
+    ("", 65),
+    ("<｜end▁of▁sentence｜>", 65),
+    ("<|det|>text [1, 2, 3, 4]<|/det|>", 65),
+    ("<|det|>text [1, 2, 3, 4]<|/det|>Input voltage: 12 V", 0),
+])
+def test_zero_exit_without_recognized_text_is_failure(tmp_path, monkeypatch, output, expected):
+    binary = tmp_path / "llama-mtmd-cli"
+    binary.write_text("#!/bin/sh\nprintf '%s' '" + output + "'\n")
+    binary.chmod(0o755)
+    argv = ["test-unlimited-ocr.py", "--binary", str(binary)]
+    for name in ("model", "projector", "image"):
+        path = tmp_path / name
+        path.write_bytes(b"fixture")
+        argv.extend(["--" + name, str(path)])
+    destination = tmp_path / "result"
+    argv.extend(["--output", str(destination)])
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("sys.argv", argv)
+    monkeypatch.setattr(experiment, "busy", lambda: False)
+    assert experiment.main() == expected
+    manifest = json.loads((destination / "manifest.json").read_text())
+    assert manifest["runtime_returncode"] == 0
+    assert manifest["status"] == ("empty_ocr" if expected else "completed_requires_review")
+    assert (destination / "ocr.txt").read_text() == output
+
+
 def test_busy_runtime_is_detected(tmp_path, monkeypatch):
     (tmp_path / "123").mkdir()
     monkeypatch.setattr(experiment.os, "readlink", lambda _: "/opt/llama-server")
     assert experiment.busy(tmp_path)
+
+
+@pytest.mark.parametrize("ended,expected,status", [
+    (0, 65, "incomplete_ocr"),
+    (1, 0, "completed_requires_review"),
+])
+def test_nonempty_truncated_generation_cannot_pass(tmp_path, monkeypatch, ended, expected, status):
+    binary = tmp_path / "llama-mtmd-cli"
+    binary.write_text("#!/bin/sh\nprintf 'Input voltage: 12 V'\n"
+                      f"printf 'DOCTRAD_OCR_FINISH tokens=7 eog={ended}\\n' >&2\n")
+    binary.chmod(0o755)
+    argv = ["test-unlimited-ocr.py", "--binary", str(binary)]
+    for name in ("model", "projector", "image"):
+        path = tmp_path / name
+        path.write_bytes(b"fixture")
+        argv.extend(["--" + name, str(path)])
+    destination = tmp_path / "result"
+    argv.extend(["--output", str(destination)])
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("sys.argv", argv)
+    monkeypatch.setattr(experiment, "busy", lambda: False)
+    assert experiment.main() == expected
+    manifest = json.loads((destination / "manifest.json").read_text())
+    assert manifest["status"] == status
+    assert manifest["completion_verified"] == bool(ended)
+    assert manifest["generated_tokens"] == 7
 
 
 def test_file_hash_matches_known_content(tmp_path):
