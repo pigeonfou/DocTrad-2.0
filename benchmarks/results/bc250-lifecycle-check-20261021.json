@@ -1,0 +1,13 @@
+{
+  "run": 39663635203,
+  "inference_performed": false,
+  "returncode": 75,
+  "reason": "BC250_BUSY",
+  "translation_before": "inactive",
+  "translation_after": "inactive",
+  "inference_pid_before": 3048725,
+  "inference_pid_after": 3048725,
+  "model": "Qwen3.5-4B-UD-Q4_K_XL.gguf",
+  "port": 41991,
+  "ocr_command_executed": false
+}
