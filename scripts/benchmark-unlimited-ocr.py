@@ -201,7 +201,7 @@ def run(args):
                     "tokens": int(finish[1]) if finish else None,
                     "ended_eog": bool(finish and finish[2] == "1"),
                     "recognized_characters": len(target), **metrics, "source": fixture["source"], "recognized": target,
-                    "profile": {"prompt": args.prompt, "vision_cpu": args.vision_cpu,
+                    "profile": {"prompt": args.prompt, "vision_cpu": args.vision_cpu, "gpu_layers": args.gpu_layers,
                                 "projector": str(args.projector), "context": args.context, "predict": args.predict},
                     "diagnostic_native_region": fixture.get("diagnostic_native_region", False),
                     "input_size": fixture.get("input_size"), "clip": fixture.get("clip")}
