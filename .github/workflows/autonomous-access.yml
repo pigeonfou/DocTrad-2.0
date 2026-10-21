@@ -31,12 +31,13 @@ jobs:
         run: |
           set -euo pipefail
           fixture_dir="$RUNNER_TEMP/unlimited-ocr-$GITHUB_RUN_ID"
-          /opt/doctrad2/current/.venv/bin/python scripts/benchmark-unlimited-ocr.py --prepare --render-scale 2 --reference-only --min-long-edge 1200 --directory "$fixture_dir" --source-pdf /opt/doctrad2/current/benchmarks/AN_PRC_167_source.pdf
+          /opt/doctrad2/current/.venv/bin/python scripts/benchmark-unlimited-ocr.py --prepare --render-scale 2 --reference-only --min-long-edge 1200 --directory "$fixture_dir" --source-pdf /opt/doctrad2/current/benchmarks/general_equipment_source.pdf
           tar -C "$fixture_dir" -czf "$RUNNER_TEMP/ocr-fixtures-$GITHUB_RUN_ID.tar.gz" .
           remote_dir="/home/bc/.cache/doctrad2/ocr-benchmarks/$GITHUB_RUN_ID"
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "mkdir -p '$remote_dir'"
           scp -F "$HOME/.ssh/doctrad2-bc250/config" "$RUNNER_TEMP/ocr-fixtures-$GITHUB_RUN_ID.tar.gz" "doctrad2-bc250:$remote_dir/fixtures.tar.gz"
           scp -F "$HOME/.ssh/doctrad2-bc250/config" scripts/benchmark-unlimited-ocr.py "doctrad2-bc250:$remote_dir/"
+          scp -F "$HOME/.ssh/doctrad2-bc250/config" scripts/test-unlimited-ocr.py "doctrad2-bc250:$remote_dir/"
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "tar -xzf '$remote_dir/fixtures.tar.gz' -C '$remote_dir'"
       - name: Measure grounded OCR on complete technical pages
         shell: bash
@@ -61,13 +62,28 @@ jobs:
           trap 'sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service' EXIT
           sudo -n /usr/bin/systemctl stop doctrad2-bc250-runtime.service
           set +e
-          python3 "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id/benchmark-unlimited-ocr.py" \
-            --directory "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id" \
+          python3 "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id/test-unlimited-ocr.py" \
+            --image "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id/technical-reference-1.png" \
+            --output "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id/cli-result" \
             --binary "$source_dir/build-vulkan/bin/llama-mtmd-cli" \
             --model /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/Unlimited-OCR-BF16.gguf \
-            --projector /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/mmproj-Unlimited-OCR-F16.gguf --predict 2400 --prompt "<|grounding|>OCR this image."
+            --projector /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/mmproj-Unlimited-OCR-F16.gguf
           status=$?
           set -e
+          python3 - "$run_id" <<'PY'
+          import importlib.util, json, sys
+          from pathlib import Path
+          root=Path('/home/bc/.cache/doctrad2/ocr-benchmarks')/sys.argv[1]
+          manifest=json.loads((root/'cli-result/manifest.json').read_text())
+          spec=importlib.util.spec_from_file_location('bench',root/'benchmark-unlimited-ocr.py')
+          bench=importlib.util.module_from_spec(spec);spec.loader.exec_module(bench)
+          source=json.loads((root/'fixtures.json').read_text())[0]['source']
+          text=bench.clean_output((root/'cli-result/ocr.txt').read_text())
+          metrics=bench.accuracy(source,text)
+          print('PUBLIC_CLI_RESULT='+json.dumps({'manifest':manifest,'metrics':metrics,'recognized':text},ensure_ascii=False))
+          assert manifest['returncode']==0 and manifest['completion_verified']
+          assert metrics['word_recall']>=.95 and metrics['word_precision']>=.95 and metrics['numbers_preserved']
+          PY
           sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service
           for attempt in $(seq 1 90); do
             if curl -fsS --max-time 2 http://127.0.0.1:52365/health; then break; fi
