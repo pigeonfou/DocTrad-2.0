@@ -27,6 +27,26 @@ Exécution 39517254256 : comparaison à 288 dpi avec extraction du texte des cel
 
 Exécution 39517568840 : quatre zones en grille 2×2, chevauchement de 10 %, première page à 288 dpi. Les quatre générations terminent en environ 20 à 23 secondes chacune, mais les mentions recherchées restent absentes et les zones coupent des lignes de texte. Ce mode est rejeté pour une activation automatique ; les résultats partiels ne doivent pas remplacer la page entière. Traduction restaurée et santé ok.
 
+## Essais supplémentaires du 21 octobre 2026
+
+Les régions de diagnostic sont choisies par taille de police (≤8 points) ou inclinaison (>0,02 sur la composante verticale de la direction). Seuls leurs pixels sont transmis au modèle ; la référence native sert ensuite à la mesure.
+
+| Exécution | Modification | Résultat |
+|---|---|---|
+| 39564476046 | Régions entières, document parsing. | Deux sorties vides |
+| 39564708205 | Free OCR. | Mentions récupérées avec du texte ajouté : rejet |
+| 39564918618 | Free OCR. + consigne générique de transcription seule | Deux sorties vides |
+| 39565177383 | <\|grounding\|>OCR this image. | Petite mention photographique exacte en 17,25 s ; tampon vide |
+| 39565426708 | Même prompt, redressement géométrique | Petite mention exacte ; tampon répétitif, 5500 tokens sans EOG : rejet |
+| 39565818333 | Projecteur BF16, redressement, budget 512 | Tampon avec caractères ajoutés ; petite mention vide : rejet |
+| 39566220878 | Vision CPU BC250, F16, décodage Vulkan | Petite mention exacte en 27,12 s ; tampon vide |
+| 39566532510 | Prompt localisé sur les deux pages entières | Pas de récupération des petites mentions ; contrôle strict toujours en échec |
+| 39567006674 | Script CLI réutilisable avec profil corrigé, page technique simple | Réussite : 238 tokens, EOG vérifié, rappel/précision lexicaux 100 %, nombres contrôlés conservés |
+
+Le projecteur F16 sur GPU demeure le profil retenu. Le succès de la petite mention sur une région ne qualifie pas le document entier. Le recours à des coordonnées natives pour ce diagnostic ne constitue pas une détection de régions sur des scans.
+
+La correction du script CLI est isolée dans la PR #2. Les 119 tests locaux passent, dont les régressions sur génération vide et génération non vide interrompue. Le dernier essai matériel du CLI a restauré le runtime TranslateGemma et obtenu /health=ok. Les comparaisons détaillées sont dans benchmarks/results/unlimited-ocr-sparse-regions-20261021.json.
+
 ## Utilisation et limites
 
 Le script scripts/benchmark-unlimited-ocr.py permet de reproduire ces tests avec les fichiers publics dont le SHA256 est vérifié. Les réponses brutes, journaux et résultats JSON restent dans le répertoire de benchmark de chaque exécution sur la BC250.
