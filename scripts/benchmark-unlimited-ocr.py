@@ -169,7 +169,7 @@ def run(args):
         for fixture in fixtures:
             label = fixture["name"]
             command = [str(args.binary), "-m", str(args.model), "--mmproj", str(args.projector),
-                       "--image", str(directory / fixture["image"]), "-p", "document parsing.",
+                       "--image", str(directory / fixture["image"]), "-p", args.prompt,
                        "--chat-template", "deepseek-ocr", "--no-jinja",
                        "--device", "Vulkan0", "--n-gpu-layers", "99", "--flash-attn", "off",
                        "--no-warmup", "--temp", "0", "--repeat-penalty", "1.0",
@@ -224,6 +224,7 @@ def main():
     parser.add_argument("--tile-grid", type=int, choices=(1, 2), default=1)
     parser.add_argument("--page-limit", type=int, default=0)
     parser.add_argument("--render-scale", type=float, default=2)
+    parser.add_argument("--prompt", choices=("document parsing.", "Free OCR."), default="document parsing.")
     parser.add_argument("--context", type=int, default=8192)
     parser.add_argument("--predict", type=int, default=2400)
     args = parser.parse_args()
