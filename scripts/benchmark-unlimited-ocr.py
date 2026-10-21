@@ -200,7 +200,11 @@ def run(args):
             item = {"case": label, "returncode": code, "seconds": round(time.monotonic() - started, 3),
                     "tokens": int(finish[1]) if finish else None,
                     "ended_eog": bool(finish and finish[2] == "1"),
-                    "recognized_characters": len(target), **metrics, "source": fixture["source"], "recognized": target}
+                    "recognized_characters": len(target), **metrics, "source": fixture["source"], "recognized": target,
+                    "profile": {"prompt": args.prompt, "vision_cpu": args.vision_cpu,
+                                "projector": str(args.projector), "context": args.context, "predict": args.predict},
+                    "diagnostic_native_region": fixture.get("diagnostic_native_region", False),
+                    "input_size": fixture.get("input_size"), "clip": fixture.get("clip")}
             item["passed"] = (code == 0 and item["ended_eog"] and bool(target)
                               and metrics["word_recall"] >= .95 and metrics["word_precision"] >= .95
                               and metrics["numbers_preserved"])
