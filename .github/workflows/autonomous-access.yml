@@ -25,31 +25,34 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - name: Read BC250 inference and resource state
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/ocr-quality-and-runtime-state
+      - name: Check busy refusal without starting inference
         shell: bash
         run: |
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s --' <<'REMOTE_SCRIPT'
           set -euo pipefail
-          python3 - <<'PY'
-          import json, os, subprocess, shutil
-          from pathlib import Path
-          service='doctrad2-bc250-runtime.service'
-          state=subprocess.run(['systemctl','is-active',service],capture_output=True,text=True).stdout.strip()
-          mainpid=subprocess.run(['systemctl','show','-p','MainPID','--value',service],capture_output=True,text=True).stdout.strip()
-          processes=[]
-          for p in Path('/proc').glob('[0-9]*'):
-              try:
-                  exe=Path(os.readlink(p/'exe')).name
-                  if exe not in {'llama-server','llama-cli','llama-mtmd-cli','python','python3','stable-diffusion'}:continue
-                  argv=(p/'cmdline').read_bytes().split(b'\0')
-                  vals=[v.decode(errors='replace') for v in argv]
-                  if exe.startswith('python') and not any('unsloth' in v for v in vals):continue
-                  info={'pid':int(p.name),'exe':exe}
-                  for flag in ['--port','--model','-m']:
-                      if flag in vals and vals.index(flag)+1<len(vals):info[flag]=Path(vals[vals.index(flag)+1]).name
-                  processes.append(info)
-              except (OSError,PermissionError):pass
-          vram=Path('/sys/class/drm/card0/device/mem_info_vram_used')
-          print('BC250_STATE='+json.dumps({'runtime_state':state,'runtime_pid':mainpid,'processes':processes,'vram_bytes':vram.read_text().strip() if vram.exists() else None,'disk_free':shutil.disk_usage('/home/bc').free}))
-          PY
+          remote_dir="/home/bc/.cache/doctrad2/ocr-lifecycle-validation/$GITHUB_RUN_ID"
+          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "mkdir -p '$remote_dir'"
+          scp -F "$HOME/.ssh/doctrad2-bc250/config" scripts/run-bc250-ocr.sh "doctrad2-bc250:$remote_dir/"
+          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s --' "$GITHUB_RUN_ID" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+          root="/home/bc/.cache/doctrad2/ocr-lifecycle-validation/$1"
+          before=$(systemctl is-active doctrad2-bc250-runtime.service || true)
+          before_processes=$(ps -C llama-server,llama-cli,llama-mtmd-cli -o pid=,comm= || true)
+          set +e
+          output=$(bash "$root/run-bc250-ocr.sh" -- printf '%s\n' OCR_SENTINEL 2>&1)
+          code=$?
+          set -e
+          after=$(systemctl is-active doctrad2-bc250-runtime.service || true)
+          after_processes=$(ps -C llama-server,llama-cli,llama-mtmd-cli -o pid=,comm= || true)
+          printf 'LIFECYCLE_RESULT code=%s before=%s after=%s\n%s\n' "$code" "$before" "$after" "$output"
+          printf 'BEFORE_PROCESSES=%s\nAFTER_PROCESSES=%s\n' "$before_processes" "$after_processes"
+          test "$before" = "$after"
+          test "$before_processes" = "$after_processes"
+          if [ "$code" = 75 ]; then
+            case "$output" in *OCR_SENTINEL*) exit 1;; esac
+          elif [ "$code" != 0 ]; then
+            exit "$code"
+          fi
           REMOTE_SCRIPT
