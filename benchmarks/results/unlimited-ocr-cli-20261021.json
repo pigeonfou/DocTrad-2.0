@@ -1,0 +1,115 @@
+{
+  "run": 39567006674,
+  "manifest": {
+    "model": "Unlimited-OCR-GGUF",
+    "role": "ocr",
+    "experimental": true,
+    "files": {
+      "binary": {
+        "path": "/home/bc/.cache/doctrad2/ocr-runtime/1725dcab4baac46c4eb197afc96af7b57a81882a/build-vulkan/bin/llama-mtmd-cli",
+        "sha256": "c9387dfedee6d93b5147941e270fadea2353344a5993016aa9960ff36e6df9b0"
+      },
+      "model": {
+        "path": "/home/bc/.cache/huggingface/hub/blobs/57/579cde94f544c3d870aa96781feccdcac43f41dac9505538ff83de745cf377fd",
+        "sha256": "731b7d1f56c94198607e08cec6f11ed62e6493b8539f9f4ed337ddd1ab3a1896"
+      },
+      "projector": {
+        "path": "/home/bc/.cache/huggingface/hub/blobs/31/3138cff63b9890f87a7c8284727fce35013e1f17da85f47e853b55b49e3dcd5b",
+        "sha256": "4f28c295e1fcf67a97488e356f2b4372da4702b77fdfad0fa138b5821325743c"
+      },
+      "image": {
+        "path": "/home/bc/.cache/doctrad2/ocr-benchmarks/39567006674/technical-reference-1.png",
+        "sha256": "3db1d0bb3ddfd72be4cc8f09d471bb43ed6a273de8db3bc16c9adfd3f9d4fcdd"
+      }
+    },
+    "translation_performed": false,
+    "started": 1792570103.8830824,
+    "command": [
+      "/home/bc/.cache/doctrad2/ocr-runtime/1725dcab4baac46c4eb197afc96af7b57a81882a/build-vulkan/bin/llama-mtmd-cli",
+      "-m",
+      "/home/bc/.cache/huggingface/hub/blobs/57/579cde94f544c3d870aa96781feccdcac43f41dac9505538ff83de745cf377fd",
+      "--mmproj",
+      "/home/bc/.cache/huggingface/hub/blobs/31/3138cff63b9890f87a7c8284727fce35013e1f17da85f47e853b55b49e3dcd5b",
+      "--image",
+      "/home/bc/.cache/doctrad2/ocr-benchmarks/39567006674/technical-reference-1.png",
+      "-p",
+      "document parsing.",
+      "--chat-template",
+      "deepseek-ocr",
+      "--no-jinja",
+      "--device",
+      "Vulkan0",
+      "--n-gpu-layers",
+      "99",
+      "--temp",
+      "0",
+      "--repeat-penalty",
+      "1.0",
+      "--flash-attn",
+      "off",
+      "--no-warmup",
+      "-n",
+      "2600",
+      "-c",
+      "8192",
+      "--override-kv",
+      "deepseek2-ocr.attention.sliding_window=int:128",
+      "--cache-type-v",
+      "f32",
+      "-b",
+      "512",
+      "-ub",
+      "128",
+      "--dry-multiplier",
+      "0.8",
+      "--dry-base",
+      "1.75",
+      "--dry-allowed-length",
+      "35",
+      "--dry-penalty-last-n",
+      "128",
+      "--dry-sequence-breaker",
+      "none"
+    ],
+    "runtime_returncode": 0,
+    "returncode": 0,
+    "status": "completed_requires_review",
+    "completion_verified": true,
+    "generated_tokens": 238,
+    "recognized_characters": 528,
+    "finished": 1792570124.1762416
+  },
+  "metrics": {
+    "cer": 0.14015,
+    "word_recall": 1,
+    "word_precision": 1,
+    "source_numbers": {
+      "2": 1,
+      "4": 2,
+      "6": 1,
+      "7": 1,
+      "12": 1,
+      "24": 1,
+      "65": 1,
+      "500": 1,
+      "3.5": 1,
+      "-15": 1,
+      "7.9": 1
+    },
+    "recognized_numbers": {
+      "2": 1,
+      "4": 2,
+      "6": 1,
+      "7": 1,
+      "12": 1,
+      "24": 1,
+      "65": 1,
+      "500": 1,
+      "3.5": 1,
+      "-15": 1,
+      "7.9": 1
+    },
+    "numbers_preserved": true
+  },
+  "recognized": "PUMP INSTALLATION GUIDE\nDisconnect the power supply before installation. The pump requires 24 V and draws 3.5 A. Do not operate it without water.\nUse a 12-pin connector and a 4-meter cable. Operating temperature: -15 to 65 degrees Celsius. Firmware version v4.7.9.\n> Check both valves before starting.\nDimensions: 2 H x 4 W x 6 D in. Maximum pressure: 7 bar. Keep the emergency stop accessible.\nRecord the serial number before servicing. Replace the filter every 500 hours. Never bypass the safety switch.\nwww.example.org/manual"
+}
