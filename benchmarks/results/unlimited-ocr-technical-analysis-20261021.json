@@ -1,0 +1,504 @@
+{
+  "version": "ocr-technical-analysis-1",
+  "inference_performed": false,
+  "quality_certified": false,
+  "cases": [
+    {
+      "run_index": 0,
+      "case": "technical-reference-1-region-7",
+      "original_passed": false,
+      "original_word_recall": 0,
+      "original_word_precision": 0,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": false,
+      "requires_review": true
+    },
+    {
+      "run_index": 0,
+      "case": "technical-reference-1-region-16",
+      "original_passed": false,
+      "original_word_recall": 0,
+      "original_word_precision": 0,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": false,
+      "requires_review": true
+    },
+    {
+      "run_index": 1,
+      "case": "technical-reference-1-region-7",
+      "original_passed": false,
+      "original_word_recall": 1,
+      "original_word_precision": 0.15385,
+      "original_numbers_preserved": false,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "Do NOT use Unicode symbols (e.g., `²`, `⁸`) or `\\textsuperscript`.\nNSA\nCertified",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": null,
+      "requires_review": true
+    },
+    {
+      "run_index": 1,
+      "case": "technical-reference-1-region-16",
+      "original_passed": false,
+      "original_word_recall": 1,
+      "original_word_precision": 0.425,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "Text: \"The image contains no text. The horizontal line is a stylistic or background element and must be ignored according to the rules.\"\nThe appearance of U.S. Department of War visual information does not imply or constitute DoW endorsement.",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": null,
+      "requires_review": true
+    },
+    {
+      "run_index": 2,
+      "case": "technical-reference-1-region-7",
+      "original_passed": false,
+      "original_word_recall": 0,
+      "original_word_precision": 0,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": false,
+      "requires_review": true
+    },
+    {
+      "run_index": 2,
+      "case": "technical-reference-1-region-16",
+      "original_passed": false,
+      "original_word_recall": 0,
+      "original_word_precision": 0,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": false,
+      "requires_review": true
+    },
+    {
+      "run_index": 3,
+      "case": "technical-reference-1-region-7",
+      "original_passed": false,
+      "original_word_recall": 0,
+      "original_word_precision": 0,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": false,
+      "requires_review": true
+    },
+    {
+      "run_index": 3,
+      "case": "technical-reference-1-region-16",
+      "original_passed": true,
+      "original_word_recall": 1,
+      "original_word_precision": 1,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "The appearance of U.S. Department of War visual information does not imply or constitute DoW endorsement.",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": null,
+      "requires_review": true
+    },
+    {
+      "run_index": 4,
+      "case": "technical-reference-1-region-7",
+      "original_passed": false,
+      "original_word_recall": 0,
+      "original_word_precision": 0,
+      "original_numbers_preserved": false,
+      "ended_eog": false,
+      "new_inference_performed": false,
+      "error": "complete_recorded_response_required",
+      "requires_review": true
+    },
+    {
+      "run_index": 4,
+      "case": "technical-reference-1-region-16",
+      "original_passed": true,
+      "original_word_recall": 1,
+      "original_word_precision": 1,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "The appearance of U.S. Department of War visual information does not imply or constitute DoW endorsement.",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": null,
+      "requires_review": true
+    },
+    {
+      "run_index": 5,
+      "case": "technical-reference-1-region-7",
+      "original_passed": false,
+      "original_word_recall": 1,
+      "original_word_precision": 0.08696,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "er.er.er.er.er.er.er.er.er.er.er.er.er.er.er.er.er.er.er.er.er.\nNSA\nCertified",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": null,
+      "requires_review": true
+    },
+    {
+      "run_index": 5,
+      "case": "technical-reference-1-region-16",
+      "original_passed": false,
+      "original_word_recall": 0,
+      "original_word_precision": 0,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": false,
+      "requires_review": true
+    },
+    {
+      "run_index": 6,
+      "case": "technical-reference-1-region-7",
+      "original_passed": false,
+      "original_word_recall": 0,
+      "original_word_precision": 0,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": false,
+      "requires_review": true
+    },
+    {
+      "run_index": 6,
+      "case": "technical-reference-1-region-16",
+      "original_passed": true,
+      "original_word_recall": 1,
+      "original_word_precision": 1,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "The appearance of U.S. Department of War visual information does not imply or constitute DoW endorsement.",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": []
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": false,
+      "technical_checks_passed": null,
+      "requires_review": true
+    },
+    {
+      "run_index": 7,
+      "case": "technical-reference-1",
+      "original_passed": false,
+      "original_word_recall": 0.92675,
+      "original_word_precision": 0.97324,
+      "original_numbers_preserved": true,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "[Non-Text]\nL3HARRIS®\nFAST. FORWARD.\nAN/PRC-167\nMULTICHANNEL MANPACK\nHigh-speed MANET and SATCOM connectivity\nThe L3Harris AN/PRC-167 Multichannel Manpack Radio is a versatile, secure solution that leverages crossbanding to provide simultaneous data and voice across SATCOM, Line-of-Sight and Mobile Ad Hoc Networking (MANET) modes. As mission needs evolve, this software-defined manpack supports fast, in-field updates to new capabilities. An external mission module hardware interface allows warfighters to quickly add options including ISR video and SATCOM.\n\nThe Multichannel Manpack provides an up-to-the-moment Common Operational Picture (COP) throughout the battlespace via advanced crossbanding and high-speed TSM-X™ MANET. In addition to legacy SATCOM support, the radio incorporates MUOS-capable communications hardware for true Beyond Line-Of-Sight communications on the move, with 3.2 in development and L-TACTM (L-Band SATCOM), providing alternative modes for Beyond Line-of-Sight, on the move.\nThe AN/PRC-167 is equipped with software-defined L3Harris Denali® encryption, enhancing tactical interoperability by allowing dual-channel and independent security level combinations up to TOP SECRET. Friendly Force survivability and effectiveness are advanced through an internal SAASM GPS and Signals-Based Threat Warning technologies.\nDesigned for rapid deployment and ease of use, the compact AN/PRC-167 features the familiar Falcon® radio interface. WebUI enhances the seamless experience, supporting remote radio, network monitoring and management through a browser on any end-user device.\n\nINDUSTRY-LEADING\nWAVEFORM PORTFOLIO\nAND INTEROPERABILITY\nKEY BENEFITS\n> Multiple capabilities in a single, compact dual-channel manpack speeds deployment and reduces costs for dismount and vehicular missions\n> High-speed tactical MANETs expand real-time networking\n> Shared COP and mission effectiveness advanced through simultaneous, fully redundant, dual-channel voice, data and video crossbanding\n> Upgrades to evolving tactical needs are simplified through hardware mission module and software-defined architecture\n> High Assurances architecture allows Multiple Independent Levels of Security (MILS) up to TOP SECRET\n> WebUI simplifies radio network management via Android™ and Windows® devices\nL3Harris.com",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": [
+            {
+              "value": "3",
+              "count": 2
+            }
+          ]
+        },
+        "physical_quantities": {
+          "missing": [],
+          "added": []
+        },
+        "identifiers": {
+          "missing": [],
+          "added": []
+        }
+      },
+      "technical_checks_applicable": true,
+      "technical_checks_passed": false,
+      "requires_review": true
+    },
+    {
+      "run_index": 7,
+      "case": "technical-reference-2",
+      "original_passed": false,
+      "original_word_recall": 0.97312,
+      "original_word_precision": 0.97662,
+      "original_numbers_preserved": false,
+      "ended_eog": true,
+      "new_inference_performed": false,
+      "text": "GENERAL\n\n\n\tNomenclature\t\tAN/PRC-167, RT-2096\t\n\n\tFrequency Range\t\tBoth channels support the following range of frequencies:30-512 MHz764-2600 MHzSBTW/SA RX only: 30-2600 MHz\t\n\n\tNet Presets\t\t99 (standard); unlimited with multiple mission files\t\n\n\tChannel Spacing/Bandwidth\t\t5 kHz-40 MHz\t\n\n\tGPS\t\tBuilt-in module—SAASM L1/L2\t\n\n\tManagement Tool\t\tWindows®-based Communications Planning Application (CPA); JENM and ATOM compatible WebUI for network monitoring and management\t\n\n\tFrequency Tuning\t\t10 Hz\t\n\n\tSoftware Environment\t\tSCA v2.2.2\t\n\n\tFrequency Tuning\t\t0.5 ppm\t\n\n\tRemote Control\t\tHW: Remote Keypad Display Unit (RKDU)SW: SNMP, ASCII, WebUI with WebKDU\t\n\n\nTRANSMITTER\n\n\n\tPower Output\t\t250 mW up to 20 W, LOS and SATCOM modes\t\n\n\tSpurious Suppression\t\t> -53dBc\t\n\n\tHarmonic and Spurious Suppression\t\t> -53dBc\t\n\n\nRECEIVER\n\n\n\tSensitivity\t\tFM-118 dBm @12 dB SINADAM -110 dBm @ 10 dB @70 % Mod.116 dBm, 12 dB SINAD\t\n\n\tAdjacent Channel Rejection\t\t60 dBm\t\n\n\tSquelch\t\tCDCSS or CTCSS, tone, noise or none\t\n\n\nPOWER\n\n\n\tPower Input\t\t18 VDC to 35 VDC\t\n\n\tPower Consumption\t\tUp to 180 W(while powering audio accessory, EUD and ISR MM)\t\n\n\tBattery Types\t\tBB-2590/U for full radio capabilityCan use BA-5590/U and BA-5390/U\t\n\n\nSECURITY\n\n\n\tEncryption\t\tDenali-based Type-1 Suite A and Suite B encryption (selections vary by waveform)\t\n\n\n*TrellisWare and TSM and TSM-X are registered trademarks of TrellisWare Technologies, Inc. in the United States and other countries.\nAVAILABLE MODES AND WAVEFORMS\n\n\n\tNarrowband Waveforms\t\tFM/FSK, AM/ASK, SINCGARS, HAVEQUICK I/II, ASCM, SATURN ED 4, P25 with Phase II Trunking, WREN-NB, ARROW\", MIL-STD-181B\t\n\n\tWideband Waveforms\t\tARROW, ANW2°C, ANW2D, WRAITH, *TSM-X\", *WREN-TSM-X\"\t\n\n\tUHF SATCOM Waveforms\t\tHPW, IW Phase I and II, L-TAC, DAMA, MUOS\t\n\n\t\t\tVoice: Narrowband analog/PCM AM/FM CVSD ASK/FSK cipher text Wideband 2400 bps MELPe LPC/2400-MELP - SATCOM (IW)\t\n\n\tVoice and Data Modes\t\tData: Tactical INE- HAIPE, Wideband up to 50 Mbps, PSK, CPM, GMS, OFDM Narrowband analog/PCM AM/FM CVSD ASK/FSK cipher text Wideband up to 16 Mbps, PSK, CPM, GMSK\t\n\n\nPHYSICAL\n\n\n\tDimensions\t\t3.50 H x 7.25 W x 14.31 D in (with battery)8.89 H x 18.41 W x 36.34 D cm (with battery)\t\n\n\tVolume\t\t167 in³ (without battery)275 in³ (with battery)\t\n\n\tWeight\t\t12.9 lbs (with battery)5.85 kg\t\n\n\nENVIRONMENTAL\n\n\n\tShock and Vibration\t\tMIL-STD-810G\t\n\n\tTemperature\t\tOperating: -40°F to 140°F (-40°C to +60°C)Storage: -40°F to 185°F (-40°C to +85°C)\t\n\n\tImmersion\t\t2-meter salt water (MIL-STD-810G)\t\n\n\tEMI/RFI\t\tMIL-STD-461F\t\n\n\tSand/Dust/Salt/Fog/Rain\t\tMIL-STD-810G\t\n\n\nINTERFACES\n\n\n\tData\t\tUSB 2.0, IP over USB, Ethernet\t\n\n\tAudio\t\t19-pin ADF, 2-channel audio + KDU, USB 2.0, fill Support for 6-pin ADF\t\n\n\tAntenna Ports\t\t50-ohm TNC and 50-ohn N-type, per channel50-ohm TNC GPS\t\n\n\tProgramming\t\tUSB 2.0\t\n\n\tKey Fill\t\tDS-101, USB\t\n\n\tFunction Knob\t\tOFF, ON, LD, Z\t\n\n\tExternal Mission Module\t\tPower, audio data, control/status\t\n\n\nSee L3Harris Product Catalog for accessories.\nAN/PRC-167 Multichannel Manpack\n© 2026 L3Harris Technologies, Inc. | 07/2026 | L33398\nNON-EXPORT CONTROLLED: THIS DOCUMENT CONSISTS OF INFORMATION THAT IS NOT DEFINED AS CONTROLLED TECHNICAL DATA UNDER ITAR PART 120.33 OR TECHNOLOGY UNDER EAR PART 772.\nL3Harris is the Trusted Disruptor in defense tech. With customers' mission-critical needs always in mind, our employees deliver end-to-end technology solutions connecting the space, air, land, sea and cyber domains in the interest of national security. Visit L3Harris.com for more information.\n\nL3HARRIS®\n1025 W. NASA Boulevard\nMelbourne, FL 32919\nL3Harris.com",
+      "tables": [],
+      "format_issues": [],
+      "checks": {
+        "numbers": {
+          "missing": [],
+          "added": [
+            {
+              "value": "3",
+              "count": 1
+            }
+          ]
+        },
+        "physical_quantities": {
+          "missing": [
+            {
+              "value": [
+                "-2.6E+3",
+                "MHz"
+              ],
+              "count": 1
+            }
+          ],
+          "added": [
+            {
+              "value": [
+                "2",
+                "°C"
+              ],
+              "count": 1
+            }
+          ]
+        },
+        "identifiers": {
+          "missing": [],
+          "added": [
+            {
+              "value": "MHz764-2600",
+              "count": 1
+            },
+            {
+              "value": "channel50-ohm",
+              "count": 1
+            }
+          ]
+        }
+      },
+      "technical_checks_applicable": true,
+      "technical_checks_passed": false,
+      "requires_review": true
+    }
+  ]
+}
