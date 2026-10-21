@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import time
 
@@ -15,12 +16,26 @@ def digest(path):
         return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
+def recognized_text(output):
+    """Ignore control/grounding tokens when deciding whether OCR read anything."""
+    output = re.sub(r"<\|det\|>.*?<\|/det\|>", "", output, flags=re.DOTALL)
+    output = re.sub(r"(?m)^[ \t]*[A-Za-z_][\w-]*[ \t]*\[[0-9., \t+-]+\][ \t]*<\|/det\|>", "", output)
+    output = re.sub(r"<\|/?(?:ref|grounding)\|>", "", output)
+    for token in ("<｜end▁of▁sentence｜>", "<｜begin▁of▁sentence｜>", "<｜▁pad▁｜>"):
+        output = output.replace(token, "")
+    return output.strip()
+
+
 def command(binary, model, projector, image):
     return [str(binary), "-m", str(model), "--mmproj", str(projector),
             "--image", str(image), "-p", "document parsing.",
-            "--chat-template", "deepseek-ocr", "--device", "Vulkan0",
+            "--chat-template", "deepseek-ocr", "--no-jinja", "--device", "Vulkan0",
             "--n-gpu-layers", "99", "--temp", "0", "--repeat-penalty", "1.0",
-            "--flash-attn", "off", "--no-warmup", "-n", "2600", "-c", "16384"]
+            "--flash-attn", "off", "--no-warmup", "-n", "2600", "-c", "8192",
+            "--override-kv", "deepseek2-ocr.attention.sliding_window=int:128",
+            "--cache-type-v", "f32", "-b", "512", "-ub", "128",
+            "--dry-multiplier", "0.8", "--dry-base", "1.75", "--dry-allowed-length", "35",
+            "--dry-penalty-last-n", "128", "--dry-sequence-breaker", "none"]
 
 
 def busy(proc=Path("/proc")):
@@ -60,13 +75,28 @@ def main():
                     "files": {name: {"path": str(getattr(args, name)), "sha256": digest(getattr(args, name))}
                               for name in ("binary", "model", "projector", "image")},
                     "translation_performed": False, "started": time.time()}
+        env = os.environ.copy()
+        env["LD_LIBRARY_PATH"] = str(args.binary.parent) + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
         invocation = command(args.binary, args.model, args.projector, args.image)
         manifest["command"] = invocation
         try:
             with (args.output / "ocr.txt").open("w") as out, (args.output / "runtime.log").open("w") as err:
-                result = subprocess.run(invocation, stdout=out, stderr=err, timeout=900, check=False)
+                result = subprocess.run(invocation, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
+                                        timeout=900, check=False, start_new_session=True, env=env)
+            manifest["runtime_returncode"] = result.returncode
             manifest["returncode"] = result.returncode
             manifest["status"] = "completed_requires_review" if result.returncode == 0 else "failed"
+            if result.returncode == 0:
+                text = recognized_text((args.output / "ocr.txt").read_text(encoding="utf-8", errors="replace"))
+                log = (args.output / "runtime.log").read_text(errors="replace")
+                finish = re.search(r"DOCTRAD_OCR_FINISH tokens=(\d+) eog=([01])", log)
+                manifest["completion_verified"] = bool(finish and finish[2] == "1")
+                manifest["generated_tokens"] = int(finish[1]) if finish else None
+                if finish and finish[2] == "0":
+                    manifest.update(status="incomplete_ocr", returncode=65)
+                manifest["recognized_characters"] = len(text)
+                if not any(char.isalnum() for char in text):
+                    manifest.update(status="empty_ocr", returncode=65)
         except subprocess.TimeoutExpired:
             manifest.update(status="timeout", returncode=124)
         finally:
