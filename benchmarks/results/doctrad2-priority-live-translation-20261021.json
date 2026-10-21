@@ -1,0 +1,17 @@
+{
+  "verification_run": 39668441580,
+  "deployment_run": 39667362457,
+  "deployed_sha": "1ad8db8df3e484db9ef9f199b4ce918f22010beb",
+  "project_priority_authorized": true,
+  "source": "Input voltage: 12 V. Operating temperature: -20 to 55 degrees Celsius. Do not disconnect the protective earth conductor.",
+  "target": "Tension d'entrée : 12 V. Température de fonctionnement : de -20 à 55 degrés Celsius. Ne déconnectez pas le conducteur de terre de protection.",
+  "seconds": 7.874,
+  "runtime": {
+    "pid": 3608545,
+    "runtime_sha": "05367ddadee77b4d33634046d058bbb86101910a668b8759f5cd2265faab341a",
+    "vram_bytes": "8569454592"
+  },
+  "findings": [],
+  "translation_policy": "technical-flow-3.3",
+  "inference_performed": true
+}
