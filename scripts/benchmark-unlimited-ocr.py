@@ -224,7 +224,7 @@ def main():
     parser.add_argument("--tile-grid", type=int, choices=(1, 2), default=1)
     parser.add_argument("--page-limit", type=int, default=0)
     parser.add_argument("--render-scale", type=float, default=2)
-    parser.add_argument("--prompt", choices=("document parsing.", "Free OCR."), default="document parsing.")
+    parser.add_argument("--prompt", default="document parsing.")
     parser.add_argument("--context", type=int, default=8192)
     parser.add_argument("--predict", type=int, default=2400)
     args = parser.parse_args()
