@@ -31,14 +31,14 @@ jobs:
         run: |
           set -euo pipefail
           fixture_dir="$RUNNER_TEMP/unlimited-ocr-$GITHUB_RUN_ID"
-          /opt/doctrad2/current/.venv/bin/python scripts/benchmark-unlimited-ocr.py --prepare --render-scale 4 --text-regions --page-limit 1 --reference-only --min-long-edge 1200 --directory "$fixture_dir" --source-pdf /opt/doctrad2/current/benchmarks/AN_PRC_167_source.pdf
+          /opt/doctrad2/current/.venv/bin/python scripts/benchmark-unlimited-ocr.py --prepare --render-scale 2 --reference-only --min-long-edge 1200 --directory "$fixture_dir" --source-pdf /opt/doctrad2/current/benchmarks/AN_PRC_167_source.pdf
           tar -C "$fixture_dir" -czf "$RUNNER_TEMP/ocr-fixtures-$GITHUB_RUN_ID.tar.gz" .
           remote_dir="/home/bc/.cache/doctrad2/ocr-benchmarks/$GITHUB_RUN_ID"
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "mkdir -p '$remote_dir'"
           scp -F "$HOME/.ssh/doctrad2-bc250/config" "$RUNNER_TEMP/ocr-fixtures-$GITHUB_RUN_ID.tar.gz" "doctrad2-bc250:$remote_dir/fixtures.tar.gz"
           scp -F "$HOME/.ssh/doctrad2-bc250/config" scripts/benchmark-unlimited-ocr.py "doctrad2-bc250:$remote_dir/"
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "tar -xzf '$remote_dir/fixtures.tar.gz' -C '$remote_dir'"
-      - name: Measure deskewed sparse-region OCR completeness
+      - name: Measure grounded OCR on complete technical pages
         shell: bash
         run: |
           ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s --' "$GITHUB_RUN_ID" <<'REMOTE_SCRIPT'
@@ -65,7 +65,7 @@ jobs:
             --directory "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id" \
             --binary "$source_dir/build-vulkan/bin/llama-mtmd-cli" \
             --model /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/Unlimited-OCR-BF16.gguf \
-            --projector /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/mmproj-Unlimited-OCR-F16.gguf --predict 512 --vision-cpu --prompt "<|grounding|>OCR this image."
+            --projector /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/mmproj-Unlimited-OCR-F16.gguf --predict 2400 --prompt "<|grounding|>OCR this image."
           status=$?
           set -e
           sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service
