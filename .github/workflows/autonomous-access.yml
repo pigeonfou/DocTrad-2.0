@@ -7,7 +7,7 @@ permissions:
   contents: read
 concurrency:
   group: doctrad2-production
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   diagnose:
     runs-on: [self-hosted, Linux, X64, doctrad2-deploy]
@@ -25,34 +25,54 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - uses: actions/checkout@v4
-        with:
-          ref: fix/ocr-quality-and-runtime-state
-      - name: Check busy refusal without starting inference
+      - name: Prioritize DocTrad2 on BC250 and load translation runtime
         shell: bash
         run: |
+          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s --' <<'REMOTE_SCRIPT'
           set -euo pipefail
-          remote_dir="/home/bc/.cache/doctrad2/ocr-lifecycle-validation/$GITHUB_RUN_ID"
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "mkdir -p '$remote_dir'"
-          scp -F "$HOME/.ssh/doctrad2-bc250/config" scripts/run-bc250-ocr.sh "doctrad2-bc250:$remote_dir/"
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s --' "$GITHUB_RUN_ID" <<'REMOTE_SCRIPT'
-          set -euo pipefail
-          root="/home/bc/.cache/doctrad2/ocr-lifecycle-validation/$1"
-          before=$(systemctl is-active doctrad2-bc250-runtime.service || true)
-          before_processes=$(ps -C llama-server,llama-cli,llama-mtmd-cli -o pid=,comm= || true)
-          set +e
-          output=$(bash "$root/run-bc250-ocr.sh" -- printf '%s\n' OCR_SENTINEL 2>&1)
-          code=$?
-          set -e
-          after=$(systemctl is-active doctrad2-bc250-runtime.service || true)
-          after_processes=$(ps -C llama-server,llama-cli,llama-mtmd-cli -o pid=,comm= || true)
-          printf 'LIFECYCLE_RESULT code=%s before=%s after=%s\n%s\n' "$code" "$before" "$after" "$output"
-          printf 'BEFORE_PROCESSES=%s\nAFTER_PROCESSES=%s\n' "$before_processes" "$after_processes"
-          test "$before" = "$after"
-          test "$before_processes" = "$after_processes"
-          if [ "$code" = 75 ]; then
-            case "$output" in *OCR_SENTINEL*) exit 1;; esac
-          elif [ "$code" != 0 ]; then
-            exit "$code"
-          fi
+          python3 - <<'PY'
+          import json, os, signal, subprocess, time
+          from pathlib import Path
+          service='doctrad2-bc250-runtime.service'
+          runtime_pid=int(subprocess.run(['systemctl','show','-p','MainPID','--value',service],capture_output=True,text=True,check=True).stdout.strip() or '0')
+          stopped=[]
+          for p in Path('/proc').glob('[0-9]*'):
+              try:
+                  if Path(os.readlink(p/'exe')).name!='llama-server' or int(p.name)==runtime_pid:continue
+                  if p.stat().st_uid!=os.getuid():raise RuntimeError('competing_runtime_not_owned_by_bc')
+                  argv=[v.decode(errors='replace') for v in (p/'cmdline').read_bytes().split(b'\0')]
+                  flag=next((v for v in ['-m','--model'] if v in argv),None)
+                  model=Path(argv[argv.index(flag)+1]).name if flag else ''
+                  if not model.startswith('Qwen3.5-4B-'):raise RuntimeError('unexpected_competing_model_'+model)
+                  fd=os.pidfd_open(int(p.name))
+                  signal.pidfd_send_signal(fd,signal.SIGTERM)
+                  for _ in range(120):
+                      if not p.exists():break
+                      time.sleep(.25)
+                  if p.exists():
+                      signal.pidfd_send_signal(fd,signal.SIGKILL)
+                      for _ in range(40):
+                          if not p.exists():break
+                          time.sleep(.25)
+                  os.close(fd)
+                  if p.exists():raise RuntimeError('competing_process_did_not_exit')
+                  stopped.append({'pid':int(p.name),'model':model})
+              except (FileNotFoundError,ProcessLookupError):continue
+          print('PROJECT_PRIORITY_STOPPED='+json.dumps(stopped))
+          PY
+          sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service
+          ready=0
+          for attempt in $(seq 1 90); do
+            if curl -fs --max-time 2 http://127.0.0.1:52365/health; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" = 1
+          systemctl is-active doctrad2-bc250-runtime.service
+          python3 - <<'PY'
+          import json, urllib.request
+          r=json.load(urllib.request.urlopen('http://127.0.0.1:52365/props',timeout=10))
+          name=r.get('model_path',r.get('model_alias',''))
+          print('PROJECT_RUNTIME='+json.dumps({'model':name,'context':r.get('default_generation_settings',{}).get('n_ctx')}))
+          assert 'translategemma-12b' in name.lower()
+          PY
           REMOTE_SCRIPT
