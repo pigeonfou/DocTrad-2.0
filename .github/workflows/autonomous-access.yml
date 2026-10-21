@@ -25,36 +25,55 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - uses: actions/checkout@v4
-      - name: Prepare intact sparse regions from pinned public reference
+      - name: Verify deployed health and actual production translation on BC250
         shell: bash
         run: |
           set -euo pipefail
-          fixture_dir="$RUNNER_TEMP/ocr-cpu-decoder-$GITHUB_RUN_ID"
-          /opt/doctrad2/current/.venv/bin/python scripts/benchmark-unlimited-ocr.py --prepare --text-regions --reference-only --page-limit 1 --render-scale 4 --min-long-edge 1200 --directory "$fixture_dir" --source-pdf /opt/doctrad2/current/benchmarks/AN_PRC_167_source.pdf
-          tar -C "$fixture_dir" -czf "$RUNNER_TEMP/ocr-cpu-decoder-$GITHUB_RUN_ID.tar.gz" .
-          remote_dir="/home/bc/.cache/doctrad2/ocr-benchmarks/$GITHUB_RUN_ID"
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "mkdir -p '$remote_dir'"
-          scp -F "$HOME/.ssh/doctrad2-bc250/config" "$RUNNER_TEMP/ocr-cpu-decoder-$GITHUB_RUN_ID.tar.gz" "doctrad2-bc250:$remote_dir/fixtures.tar.gz"
-          scp -F "$HOME/.ssh/doctrad2-bc250/config" scripts/benchmark-unlimited-ocr.py scripts/run-bc250-ocr.sh "doctrad2-bc250:$remote_dir/"
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "tar -xzf '$remote_dir/fixtures.tar.gz' -C '$remote_dir'"
-      - name: Compare BC250 CPU text decoding while preserving translation runtime
-        shell: bash
-        run: |
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s --' "$GITHUB_RUN_ID" <<'REMOTE_SCRIPT'
-          set -euo pipefail
-          root="/home/bc/.cache/doctrad2/ocr-benchmarks/$1"
-          runtime=/home/bc/.cache/doctrad2/ocr-runtime/1725dcab4baac46c4eb197afc96af7b57a81882a/build-vulkan/bin
-          snapshot=/home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661
-          printf 'BEFORE_OCR_PROCESSES\n'
-          ps -C llama-server,llama-cli,llama-mtmd-cli -o pid=,stat=,comm= || true
-          set +e
-          bash "$root/run-bc250-ocr.sh" -- python3 "$root/benchmark-unlimited-ocr.py" --directory "$root" --binary "$runtime/llama-mtmd-cli" --model "$snapshot/Unlimited-OCR-BF16.gguf" --projector "$snapshot/mmproj-Unlimited-OCR-F16.gguf" --gpu-layers 0 --predict 512 --prompt '<|grounding|>OCR this image.'
-          code=$?
-          set -e
-          printf 'CPU_DECODER_EXPERIMENT_RETURN=%s\n' "$code"
-          curl -fsS http://127.0.0.1:52365/health
-          systemctl is-active doctrad2-bc250-runtime.service
-          if [ "$code" = 65 ]; then printf '\nOCR_QUALITY_REJECTED=1\n'; exit 0; fi
-          exit "$code"
-          REMOTE_SCRIPT
+          printf 'INSTALLED_RELEASE='
+          readlink -f /opt/doctrad2/current
+          curl -fsS http://127.0.0.1:8097/health
+          systemctl is-active doctrad2-web doctrad2-worker
+          /opt/doctrad2/current/.venv/bin/python - <<'PY'
+          import httpx, json, os, subprocess, time
+          from pathlib import Path
+          from doctrad2.config import Settings
+          from doctrad2.inference import LlamaTranslator
+          from doctrad2.quality import check_text
+          config=str(Path.home()/'.ssh/doctrad2-bc250/config')
+          probe="""import hashlib,json,subprocess
+          from pathlib import Path
+          pid=subprocess.run(['systemctl','show','-p','MainPID','--value','doctrad2-bc250-runtime.service'],capture_output=True,text=True,check=True).stdout.strip()
+          with (Path('/proc')/pid/'exe').open('rb') as h: sha=hashlib.file_digest(h,'sha256').hexdigest()
+          print(json.dumps({'pid':int(pid),'runtime_sha':sha,'vram_bytes':Path('/sys/class/drm/card0/device/mem_info_vram_used').read_text().strip()}))
+          """
+          result=subprocess.run(['ssh','-F',config,'doctrad2-bc250','python3 -'],input=probe.encode(),capture_output=True,check=True,timeout=30)
+          runtime=json.loads(result.stdout)
+          class SSHTransport(httpx.BaseTransport):
+              def handle_request(self, request):
+                  if request.method not in {'GET','POST'} or request.url.path not in {'/props','/tokenize','/completion','/apply-template'}:
+                      raise RuntimeError('unexpected_native_route')
+                  remote="curl -sS --max-time 120 -X "+request.method+" -H 'Content-Type: application/json' "
+                  if request.method=='POST': remote+="--data-binary @- "
+                  remote+="-w '\\n%{http_code}' http://127.0.0.1:52365"+request.url.path
+                  response=subprocess.run(['ssh','-F',config,'doctrad2-bc250',remote],input=request.content,capture_output=True,check=True,timeout=125)
+                  body,status=response.stdout.rsplit(b'\n',1)
+                  return httpx.Response(int(status),content=body,request=request)
+          settings=Settings(root=Path(os.environ['RUNNER_TEMP'])/'translation-live-verification',
+                            database_url='sqlite://',secret='public-fixture-test-not-a-production-secret',
+                            llm_url='http://127.0.0.1:52365',
+                            model_sha='b7aac4b4be7ab0c49b6556c29c4467e74313df7f1e95d9f9676bb2adf0afa528',
+                            runtime_sha=runtime['runtime_sha'])
+          source='Input voltage: 12 V. Operating temperature: -20 to 55 degrees Celsius. Do not disconnect the protective earth conductor.'
+          translator=LlamaTranslator(settings,transport=SSHTransport())
+          try:
+              start=time.monotonic()
+              target,info=translator.translate(source)
+              findings=check_text(source,target,'live-fixture')
+              report={'source':source,'target':target,'seconds':round(time.monotonic()-start,3),
+                      'runtime':runtime,'findings':[f.model_dump() for f in findings],
+                      'translation_policy':info.get('translation_policy'),'inference_performed':True}
+              print('PUBLIC_LIVE_TRANSLATION='+json.dumps(report,ensure_ascii=False))
+              assert target.strip() and target!=source and not any(f.severity=='critical' for f in findings)
+          finally:
+              translator.close()
+          PY
