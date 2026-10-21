@@ -54,3 +54,9 @@ Le script scripts/benchmark-unlimited-ocr.py permet de reproduire ces tests avec
 L'OCR et TranslateGemma utilisent la même mémoire GPU : les essais sont sérialisés et le service de traduction est restauré après l'OCR. Ne pas lancer deux moteurs simultanément.
 
 L'interface de production utilise encore l'extraction native ou Tesseract. Le profil ci-dessus est utilisable par la CLI expérimentale ; le transport OCR, les coordonnées des blocs et l'intégration au pipeline restent à qualifier avant activation dans l'interface.
+
+## Reprise du 21 octobre au soir
+
+La BC250 héberge Qwen3.5-4B-UD-Q4_K_XL sur le port 41991 ; le runtime DocTrad2 est initialement arrêté. Aucun nouvel essai d'inférence Unlimited-OCR n'a été lancé pendant cette reprise. La PR #3 ajoute l'analyse technique des réponses enregistrées et un lanceur préservant cet état initial : 134 tests locaux passent et les contrôles GitHub réussissent sous Python 3.12 et 3.14 (exécution 39663687266).
+
+Le test matériel 39663635203 confirme un refus code 75 avant exécution de la commande témoin, avec PID Qwen 3048725 inchangé et runtime DocTrad2 toujours arrêté. Les résultats sont dans benchmarks/results/bc250-lifecycle-check-20261021.json. L'analyse de 16 réponses existantes est enregistrée dans benchmarks/results/unlimited-ocr-technical-analysis-20261021.json ; elle ne certifie aucune traduction ni ne remplace les verdicts antérieurs. Les nouvelles mesures de modèle et le déploiement restent en attente de disponibilité de la BC250.
