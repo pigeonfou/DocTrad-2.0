@@ -65,7 +65,7 @@ jobs:
             --directory "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id" \
             --binary "$source_dir/build-vulkan/bin/llama-mtmd-cli" \
             --model /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/Unlimited-OCR-BF16.gguf \
-            --projector /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/mmproj-Unlimited-OCR-F16.gguf --predict 5500 --prompt "<|grounding|>OCR this image."
+            --projector /home/bc/.cache/doctrad2/ocr-reference/mmproj-unlimited-ocr-bf16.gguf --predict 512 --prompt "<|grounding|>OCR this image."
           status=$?
           set -e
           sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service
