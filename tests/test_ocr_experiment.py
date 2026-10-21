@@ -70,6 +70,32 @@ def test_busy_runtime_is_detected(tmp_path, monkeypatch):
     assert experiment.busy(tmp_path)
 
 
+@pytest.mark.parametrize("ended,expected,status", [
+    (0, 65, "incomplete_ocr"),
+    (1, 0, "completed_requires_review"),
+])
+def test_nonempty_truncated_generation_cannot_pass(tmp_path, monkeypatch, ended, expected, status):
+    binary = tmp_path / "llama-mtmd-cli"
+    binary.write_text("#!/bin/sh\nprintf 'Input voltage: 12 V'\n"
+                      f"printf 'DOCTRAD_OCR_FINISH tokens=7 eog={ended}\\n' >&2\n")
+    binary.chmod(0o755)
+    argv = ["test-unlimited-ocr.py", "--binary", str(binary)]
+    for name in ("model", "projector", "image"):
+        path = tmp_path / name
+        path.write_bytes(b"fixture")
+        argv.extend(["--" + name, str(path)])
+    destination = tmp_path / "result"
+    argv.extend(["--output", str(destination)])
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("sys.argv", argv)
+    monkeypatch.setattr(experiment, "busy", lambda: False)
+    assert experiment.main() == expected
+    manifest = json.loads((destination / "manifest.json").read_text())
+    assert manifest["status"] == status
+    assert manifest["completion_verified"] == bool(ended)
+    assert manifest["generated_tokens"] == 7
+
+
 def test_file_hash_matches_known_content(tmp_path):
     path = tmp_path / "model"
     path.write_bytes(b"abc")
