@@ -180,6 +180,8 @@ def run(args):
                        "-b", "512", "-ub", "128",
                        "--dry-multiplier", "0.8", "--dry-base", "1.75", "--dry-allowed-length", "35",
                        "--dry-penalty-last-n", "128", "--dry-sequence-breaker", "none"]
+            if args.vision_cpu:
+                command.append("--no-mmproj-offload")
             env = os.environ.copy()
             env["LD_LIBRARY_PATH"] = str(args.binary.parent)
             started = time.monotonic()
@@ -226,6 +228,7 @@ def main():
     parser.add_argument("--tile-grid", type=int, choices=(1, 2), default=1)
     parser.add_argument("--page-limit", type=int, default=0)
     parser.add_argument("--render-scale", type=float, default=2)
+    parser.add_argument("--vision-cpu", action="store_true")
     parser.add_argument("--prompt", default="document parsing.")
     parser.add_argument("--context", type=int, default=8192)
     parser.add_argument("--predict", type=int, default=2400)
