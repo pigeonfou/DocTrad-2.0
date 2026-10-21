@@ -111,7 +111,9 @@ def prepare(directory, source_pdf, min_long_edge=0, reference_only=False, render
                         continue
                     clip = (fitz.Rect(block["bbox"]) + (-3, -3, 3, 3)) & page.rect
                     scale = max(render_scale, 1000 / max(clip.width, clip.height))
-                    pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
+                    direction = block["lines"][0]["dir"]
+                    angle = -math.degrees(math.atan2(direction[1], direction[0]))
+                    pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale).prerotate(angle), clip=clip, alpha=False)
                     canvas = fitz.open()
                     region_page = canvas.new_page(width=max(1200, pix.width+100), height=max(720, pix.height+100))
                     x, y = (region_page.rect.width-pix.width)/2, (region_page.rect.height-pix.height)/2
