@@ -173,7 +173,7 @@ def run(args):
             command = [str(args.binary), "-m", str(args.model), "--mmproj", str(args.projector),
                        "--image", str(directory / fixture["image"]), "-p", args.prompt,
                        "--chat-template", "deepseek-ocr", "--no-jinja",
-                       "--device", "Vulkan0", "--n-gpu-layers", "99", "--flash-attn", "off",
+                       "--device", "Vulkan0", "--n-gpu-layers", str(args.gpu_layers), "--flash-attn", "off",
                        "--no-warmup", "--temp", "0", "--repeat-penalty", "1.0",
                        "--override-kv", "deepseek2-ocr.attention.sliding_window=int:128",
                        "--cache-type-v", "f32", "-c", str(args.context), "-n", str(args.predict),
@@ -232,6 +232,7 @@ def main():
     parser.add_argument("--tile-grid", type=int, choices=(1, 2), default=1)
     parser.add_argument("--page-limit", type=int, default=0)
     parser.add_argument("--render-scale", type=float, default=2)
+    parser.add_argument("--gpu-layers", type=int, choices=(0, 99), default=99)
     parser.add_argument("--vision-cpu", action="store_true")
     parser.add_argument("--prompt", default="document parsing.")
     parser.add_argument("--context", type=int, default=8192)
