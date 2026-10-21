@@ -25,71 +25,31 @@ jobs:
           printf '%s\n' '192.168.6.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIzJ5Hq0ndgAnTsu1aD9bNmxMSSWhsQK/Dj7d9cYVwpG' > "$access_dir/known_hosts"
           printf '%s\n' 'Host doctrad2-bc250' '  HostName 192.168.6.22' '  User bc' "  IdentityFile $access_dir/id_ed25519" "  UserKnownHostsFile $access_dir/known_hosts" '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  BatchMode yes' '  PasswordAuthentication no' '  ConnectTimeout 10' > "$access_dir/config"
           chmod 600 "$access_dir/known_hosts" "$access_dir/config"
-      - uses: actions/checkout@v4
-      - name: Prepare public technical fixtures and copy to BC250
+      - name: Read BC250 inference and resource state
         shell: bash
         run: |
+          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s --' <<'REMOTE_SCRIPT'
           set -euo pipefail
-          fixture_dir="$RUNNER_TEMP/unlimited-ocr-$GITHUB_RUN_ID"
-          /opt/doctrad2/current/.venv/bin/python scripts/benchmark-unlimited-ocr.py --prepare --render-scale 2 --reference-only --min-long-edge 1200 --directory "$fixture_dir" --source-pdf /opt/doctrad2/current/benchmarks/general_equipment_source.pdf
-          tar -C "$fixture_dir" -czf "$RUNNER_TEMP/ocr-fixtures-$GITHUB_RUN_ID.tar.gz" .
-          remote_dir="/home/bc/.cache/doctrad2/ocr-benchmarks/$GITHUB_RUN_ID"
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "mkdir -p '$remote_dir'"
-          scp -F "$HOME/.ssh/doctrad2-bc250/config" "$RUNNER_TEMP/ocr-fixtures-$GITHUB_RUN_ID.tar.gz" "doctrad2-bc250:$remote_dir/fixtures.tar.gz"
-          scp -F "$HOME/.ssh/doctrad2-bc250/config" scripts/benchmark-unlimited-ocr.py "doctrad2-bc250:$remote_dir/"
-          scp -F "$HOME/.ssh/doctrad2-bc250/config" scripts/test-unlimited-ocr.py "doctrad2-bc250:$remote_dir/"
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 "tar -xzf '$remote_dir/fixtures.tar.gz' -C '$remote_dir'"
-      - name: Measure grounded OCR on complete technical pages
-        shell: bash
-        run: |
-          ssh -F "$HOME/.ssh/doctrad2-bc250/config" doctrad2-bc250 'bash -s --' "$GITHUB_RUN_ID" <<'REMOTE_SCRIPT'
-          set -euo pipefail
-          run_id=$1
-          source_dir=/home/bc/.cache/doctrad2/ocr-runtime/1725dcab4baac46c4eb197afc96af7b57a81882a
           python3 - <<'PY'
+          import json, os, subprocess, shutil
           from pathlib import Path
-          p=Path('/home/bc/.cache/doctrad2/ocr-runtime/1725dcab4baac46c4eb197afc96af7b57a81882a/tools/mtmd/mtmd-cli.cpp')
-          s=p.read_text()
-          anchor='    std::string generated_text = common_detokenize(ctx.lctx, generated_tokens);'
-          if 'DOCTRAD_OCR_FINISH' not in s:
-              assert s.count(anchor)==1
-              backup=p.with_suffix('.cpp.before-doctrad-observe')
-              with backup.open('x') as out:out.write(s)
-              observe='    fprintf(stderr, "DOCTRAD_OCR_FINISH tokens=%zu eog=%d\\n", generated_tokens.size(), int(!generated_tokens.empty() && llama_vocab_is_eog(ctx.vocab, generated_tokens.back())));\n'
-              p.write_text(s.replace(anchor,observe+anchor))
+          service='doctrad2-bc250-runtime.service'
+          state=subprocess.run(['systemctl','is-active',service],capture_output=True,text=True).stdout.strip()
+          mainpid=subprocess.run(['systemctl','show','-p','MainPID','--value',service],capture_output=True,text=True).stdout.strip()
+          processes=[]
+          for p in Path('/proc').glob('[0-9]*'):
+              try:
+                  exe=Path(os.readlink(p/'exe')).name
+                  if exe not in {'llama-server','llama-cli','llama-mtmd-cli','python','python3','stable-diffusion'}:continue
+                  argv=(p/'cmdline').read_bytes().split(b'\0')
+                  vals=[v.decode(errors='replace') for v in argv]
+                  if exe.startswith('python') and not any('unsloth' in v for v in vals):continue
+                  info={'pid':int(p.name),'exe':exe}
+                  for flag in ['--port','--model','-m']:
+                      if flag in vals and vals.index(flag)+1<len(vals):info[flag]=Path(vals[vals.index(flag)+1]).name
+                  processes.append(info)
+              except (OSError,PermissionError):pass
+          vram=Path('/sys/class/drm/card0/device/mem_info_vram_used')
+          print('BC250_STATE='+json.dumps({'runtime_state':state,'runtime_pid':mainpid,'processes':processes,'vram_bytes':vram.read_text().strip() if vram.exists() else None,'disk_free':shutil.disk_usage('/home/bc').free}))
           PY
-          cmake --build "$source_dir/build-vulkan" --target llama-mtmd-cli --parallel 2
-          trap 'sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service' EXIT
-          sudo -n /usr/bin/systemctl stop doctrad2-bc250-runtime.service
-          set +e
-          python3 "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id/test-unlimited-ocr.py" \
-            --image "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id/technical-reference-1.png" \
-            --output "/home/bc/.cache/doctrad2/ocr-benchmarks/$run_id/cli-result" \
-            --binary "$source_dir/build-vulkan/bin/llama-mtmd-cli" \
-            --model /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/Unlimited-OCR-BF16.gguf \
-            --projector /home/bc/.cache/huggingface/hub/models--sahilchachra--Unlimited-OCR-GGUF/snapshots/0dc781d8a23f52963918ebd5b2d1b9fe61504661/mmproj-Unlimited-OCR-F16.gguf
-          status=$?
-          set -e
-          python3 - "$run_id" <<'PY'
-          import importlib.util, json, sys
-          from pathlib import Path
-          root=Path('/home/bc/.cache/doctrad2/ocr-benchmarks')/sys.argv[1]
-          manifest=json.loads((root/'cli-result/manifest.json').read_text())
-          spec=importlib.util.spec_from_file_location('bench',root/'benchmark-unlimited-ocr.py')
-          bench=importlib.util.module_from_spec(spec);spec.loader.exec_module(bench)
-          source=json.loads((root/'fixtures.json').read_text())[0]['source']
-          text=bench.clean_output((root/'cli-result/ocr.txt').read_text())
-          metrics=bench.accuracy(source,text)
-          print('PUBLIC_CLI_RESULT='+json.dumps({'manifest':manifest,'metrics':metrics,'recognized':text},ensure_ascii=False))
-          assert manifest['returncode']==0 and manifest['completion_verified']
-          assert metrics['word_recall']>=.95 and metrics['word_precision']>=.95 and metrics['numbers_preserved']
-          PY
-          sudo -n /usr/bin/systemctl start doctrad2-bc250-runtime.service
-          for attempt in $(seq 1 90); do
-            if curl -fsS --max-time 2 http://127.0.0.1:52365/health; then break; fi
-            sleep 2
-          done
-          printf '\nTRANSLATION_SERVICE_STATE='
-          systemctl is-active doctrad2-bc250-runtime.service
-          exit "$status"
           REMOTE_SCRIPT
