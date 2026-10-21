@@ -9,13 +9,15 @@ SCRIPT = Path(__file__).parents[1] / 'scripts/run-bc250-ocr.sh'
 
 
 @pytest.mark.parametrize('active,processes,command_code,late,expected,actions', [
-    (False, '123 llama-server', 0, False, 75, []),
-    (True, '100 llama-server\n123 llama-server', 0, False, 75, []),
+    (False, '123 S llama-server', 0, False, 75, []),
+    (True, '100 S llama-server\n123 S llama-server', 0, False, 75, []),
     (False, '', 0, False, 0, ['command']),
     (False, '', 65, False, 65, ['command']),
-    (True, '100 llama-server', 0, False, 0, ['stop', 'command', 'start']),
-    (True, '100 llama-server', 65, False, 65, ['stop', 'command', 'start']),
-    (True, '100 llama-server', 0, True, 75, ['stop', 'command']),
+    (True, '100 S llama-server', 0, False, 0, ['stop', 'command', 'start']),
+    (True, '100 S llama-server', 65, False, 65, ['stop', 'command', 'start']),
+    (True, '100 S llama-server', 0, True, 75, ['stop', 'command']),
+    (False, '123 Z llama-server', 0, False, 0, ['command']),
+    (True, '100 S llama-server\n123 Z llama-server', 0, False, 0, ['stop', 'command', 'start']),
 ])
 def test_lifecycle_preserves_other_workloads_and_initial_service_state(
         tmp_path, active, processes, command_code, late, expected, actions):
@@ -24,7 +26,7 @@ def test_lifecycle_preserves_other_workloads_and_initial_service_state(
     log = tmp_path / 'actions'
     helpers = {
         'systemctl': 'if [ "$1" = show ]; then echo 100; else exit ' + ('0' if active else '3') + '; fi',
-        'ps': 'if [ -f "$TEST_LATE_FILE" ]; then echo "123 llama-server"; else printf "%s\\n" "$TEST_PROCESSES"; fi',
+        'ps': 'if [ -f "$TEST_LATE_FILE" ]; then echo "123 S llama-server"; else printf "%s\\n" "$TEST_PROCESSES"; fi',
         'sudo': 'printf "%s\\n" "$3" >> "$TEST_ACTIONS"',
         'curl': 'exit 0',
         'ocr-command': 'echo command >> "$TEST_ACTIONS"; if [ "$TEST_LATE" = 1 ]; then touch "$TEST_LATE_FILE"; fi; exit "$TEST_COMMAND_CODE"',

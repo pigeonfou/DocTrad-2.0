@@ -16,7 +16,11 @@ initially_active=0
 if systemctl is-active --quiet "$runtime"; then initially_active=1; fi
 runtime_pid=$(systemctl show -p MainPID --value "$runtime")
 # ps also sees inference processes whose /proc/exe is unreadable by this account.
-processes=$(ps -C llama-server,llama-cli,llama-mtmd-cli,sd-cli,sd-server -o pid=,comm= || true)
+inference_processes() {
+  ps -C llama-server,llama-cli,llama-mtmd-cli,sd-cli,sd-server -o pid=,stat=,comm= |
+    awk '$2 !~ /^[ZX]/ {print $1, $3}' || true
+}
+processes=$(inference_processes)
 while read -r pid name; do
   [[ -z "${pid:-}" ]] && continue
   if [[ "$initially_active" != 1 || "$pid" != "$runtime_pid" ]]; then
@@ -32,7 +36,7 @@ cleanup() {
   if [[ "$restore_required" == 1 ]]; then
     # Another application may have started inference while the OCR was running.
     current_pid=$(systemctl show -p MainPID --value "$runtime")
-    current_processes=$(ps -C llama-server,llama-cli,llama-mtmd-cli,sd-cli,sd-server -o pid=,comm= || true)
+    current_processes=$(inference_processes)
     while read -r pid name; do
       [[ -z "${pid:-}" ]] && continue
       if [[ "$pid" != "$current_pid" ]]; then
