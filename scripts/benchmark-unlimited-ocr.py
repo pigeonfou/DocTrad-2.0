@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 from html.parser import HTMLParser
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -69,7 +70,7 @@ def accuracy(source, target):
             "numbers_preserved": numbers(left) == numbers(right)}
 
 
-def prepare(directory, source_pdf, min_long_edge=0, reference_only=False, render_scale=2, tile_grid=1, page_limit=0):
+def prepare(directory, source_pdf, min_long_edge=0, reference_only=False, render_scale=2, tile_grid=1, page_limit=0, text_regions=False):
     import pymupdf as fitz
     if hashlib.sha256(source_pdf.read_bytes()).hexdigest() not in SOURCE_HASHES:
         raise SystemExit("Only the pinned public reference is permitted")
@@ -98,6 +99,30 @@ def prepare(directory, source_pdf, min_long_edge=0, reference_only=False, render
             page.get_pixmap(matrix=fitz.Matrix(render_scale, render_scale), alpha=False).save(directory / name)
             fixtures.append({"name": f"technical-reference-{page.number + 1}",
                              "image": name, "source": page.get_text(sort=False)})
+            if text_regions:
+                for bi, block in enumerate(page.get_text("dict")["blocks"]):
+                    if block["type"] != 0:
+                        continue
+                    spans = [span for line in block["lines"] for span in line["spans"]]
+                    if not spans:
+                        continue
+                    rotated = any(abs(line["dir"][1]) > .02 for line in block["lines"])
+                    if min(span["size"] for span in spans) > 8 and not rotated:
+                        continue
+                    clip = (fitz.Rect(block["bbox"]) + (-3, -3, 3, 3)) & page.rect
+                    scale = max(render_scale, 1000 / max(clip.width, clip.height))
+                    pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
+                    canvas = fitz.open()
+                    region_page = canvas.new_page(width=max(1200, pix.width+100), height=max(720, pix.height+100))
+                    x, y = (region_page.rect.width-pix.width)/2, (region_page.rect.height-pix.height)/2
+                    region_page.insert_image(fitz.Rect(x,y,x+pix.width,y+pix.height), pixmap=pix)
+                    label = f"technical-reference-{page.number+1}-region-{bi}"
+                    region_page.get_pixmap(alpha=False).save(directory / (label+".png"))
+                    canvas.close()
+                    fixtures.append({"name": label, "image": label+".png",
+                                     "source": "\n".join("".join(span["text"] for span in line["spans"]) for line in block["lines"]),
+                                     "clip": list(clip), "diagnostic_native_region": True})
+                fixtures = [f for f in fixtures if f["name"] != f"technical-reference-{page.number+1}"]
             if tile_grid > 1:
                 for row in range(tile_grid):
                     for col in range(tile_grid):
@@ -195,6 +220,7 @@ def main():
     parser.add_argument("--projector", type=Path)
     parser.add_argument("--reference-only", action="store_true")
     parser.add_argument("--min-long-edge", type=int, default=0)
+    parser.add_argument("--text-regions", action="store_true")
     parser.add_argument("--tile-grid", type=int, choices=(1, 2), default=1)
     parser.add_argument("--page-limit", type=int, default=0)
     parser.add_argument("--render-scale", type=float, default=2)
@@ -204,7 +230,7 @@ def main():
     if args.prepare:
         if not args.source_pdf:
             parser.error("--source-pdf is required for fixture preparation")
-        prepare(args.directory, args.source_pdf, args.min_long_edge, args.reference_only, args.render_scale, args.tile_grid, args.page_limit)
+        prepare(args.directory, args.source_pdf, args.min_long_edge, args.reference_only, args.render_scale, args.tile_grid, args.page_limit, args.text_regions)
         return 0
     for key in ("binary", "model", "projector"):
         if getattr(args, key) is None:
