@@ -1,0 +1,31 @@
+{
+  "remote_enabled": false,
+  "endpoints": [
+    {
+      "role": "vision",
+      "base_url": "https://192.168.6.44:18081/v1",
+      "model_id": "doctrad-vision",
+      "repository": "HauhauCS/Qwen3VL-8B-Uncensored-HauhauCS-Aggressive",
+      "artifact_sha256": null,
+      "projector_sha256": null,
+      "engine_sha256": null,
+      "api_key_env": "DOCTRAD_SKYNET_VISION_KEY",
+      "ca_file": "/etc/doctrad2-skynet/skynet-ca.crt",
+      "max_output_tokens": 2048,
+      "context_tokens": 8192
+    },
+    {
+      "role": "translation",
+      "base_url": "https://192.168.6.44:18082/v1",
+      "model_id": "doctrad-translation",
+      "repository": "Qwen/Qwen3-32B",
+      "artifact_sha256": null,
+      "projector_sha256": null,
+      "engine_sha256": null,
+      "api_key_env": "DOCTRAD_SKYNET_TRANSLATION_KEY",
+      "ca_file": "/etc/doctrad2-skynet/skynet-ca.crt",
+      "max_output_tokens": 2048,
+      "context_tokens": 8192
+    }
+  ]
+}

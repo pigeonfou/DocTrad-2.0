@@ -1,7 +1,7 @@
 name: DocTrad2 checks
 on:
   push:
-    branches: [main]
+    branches: [main, Doctrad-Skynet]
   pull_request:
 permissions:
   contents: read
@@ -21,3 +21,49 @@ jobs:
       - run: pytest -q
       - run: bash -n scripts/install.sh scripts/backup.sh scripts/rollback.sh
       - run: python -m compileall -q src scripts
+
+  stage:
+    needs: tests
+    if: github.ref == 'refs/heads/Doctrad-Skynet'
+    concurrency:
+      group: doctrad-skynet-local-staging
+      cancel-in-progress: false
+    runs-on: [self-hosted, Linux, X64, doctrad2-deploy]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Prepare isolated application release on DocTrad only
+        shell: bash
+        env:
+          TESTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$TESTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$TESTED_SHA"
+          stage_base="$HOME/.local/share/doctrad2-skynet"
+          mkdir -p "$stage_base/releases" "$stage_base/qualification" "$stage_base/receipts"
+          release="$stage_base/releases/$TESTED_SHA"
+          if [ ! -d "$release" ]; then
+            staging_dir=$(mktemp -d "$stage_base/releases/.preparing-$TESTED_SHA-XXXXXX")
+            trap 'rm -rf "$staging_dir"' EXIT
+            git archive HEAD | tar -x -C "$staging_dir"
+            mv -T "$staging_dir" "$release"
+          fi
+          export PYTHONPATH="$release/src"
+          /opt/doctrad2/current/.venv/bin/python "$release/scripts/skynet-offline-smoke.py" \
+            --root "$stage_base/qualification/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --config "$release/deploy/skynet-inference.example.json" \
+            --reference /opt/doctrad2/current/benchmarks/general_equipment_source.pdf \
+            --reference /opt/doctrad2/current/benchmarks/AN_PRC_167_source.pdf \
+            > "$stage_base/receipts/$TESTED_SHA-$GITHUB_RUN_ID.json"
+          /opt/doctrad2/current/.venv/bin/python -m doctrad2.skynet_cli \
+            --root "$stage_base/workbench" readiness --config "$release/deploy/skynet-inference.example.json"
+          ln -s "$release" "$stage_base/current-$GITHUB_RUN_ID"
+          mv -Tf "$stage_base/current-$GITHUB_RUN_ID" "$stage_base/current"
+          cat "$stage_base/receipts/$TESTED_SHA-$GITHUB_RUN_ID.json"
+          printf 'SKYNET_BRANCH_STAGED=%s\nSKYNET_CONTACTED=false\n' "$TESTED_SHA"
+          curl -fsS http://127.0.0.1:8097/health
+          systemctl is-active doctrad2-web doctrad2-worker
