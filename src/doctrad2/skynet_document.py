@@ -52,7 +52,8 @@ def translation_plan(store, document, max_source_characters=4000):
             pieces.append(current)
         siblings = [other for other in ir.nodes if node.parent and other.parent == node.parent]
         headers = [{'block_id': other.id, 'source': other.text} for other in siblings
-                   if other.locator.get('row') == 0 or other.locator.get('column') == 0]
+                   if other.locator.get('row') == 0 or (other.locator.get('column') == 0
+                   and other.locator.get('row') == node.locator.get('row'))]
         for index, piece in enumerate(pieces):
             units.append({'block_id': node.id, 'part': index, 'parts': len(pieces), 'source': piece,
                           'page': node.page, 'kind': node.kind,

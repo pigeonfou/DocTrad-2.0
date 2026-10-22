@@ -9,6 +9,7 @@ from doctrad2.skynet_cli import export
 from doctrad2.skynet_document import import_document, translation_plan
 from doctrad2.skynet_inference import Endpoint, InferenceConfig, InferenceDisabled, ModelAPI
 from doctrad2.skynet_store import DocumentStore, RevisionConflict
+from doctrad2.domain import Node
 
 
 @pytest.fixture
@@ -64,6 +65,21 @@ def test_corruption_and_path_escape_are_rejected(document):
     store.object_path(digest).write_bytes(b'corrupted')
     with pytest.raises(ValueError, match='object_digest_mismatch'):
         store.document(digest)
+
+
+def test_table_context_uses_current_row_header_not_unrelated_rows(document):
+    store, digest, _ = document
+    snapshot, ir = store.document(digest)
+    ir.nodes = [Node(id=block_id, page=0, text=text, parent='table-1', kind='table_cell',
+                     locator={'row': row, 'column': column}) for block_id, text, row, column in [
+        ('column-header', 'Value', 0, 1), ('voltage-label', 'Input voltage', 1, 0),
+        ('voltage-value', '12 V', 1, 1), ('current-label', 'Current', 2, 0),
+        ('current-value', '3.5 A', 2, 1)]]
+    snapshot['ir'] = ir.model_dump()
+    plan = translation_plan(store, store.put_json(snapshot))
+    voltage = next(item for item in plan['units'] if item['block_id'] == 'voltage-value')
+    assert {item['block_id'] for item in voltage['context']['table_headers']} == {
+        'column-header', 'voltage-label'}
 
 
 def test_critical_unit_change_blocks_export_without_overwriting_source(document, tmp_path):
